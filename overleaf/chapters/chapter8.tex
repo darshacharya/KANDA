@@ -1,0 +1,91 @@
+% ================================================================
+%  Chapter 8 — Experimental Results and Conclusions (KANDA)
+%  Knowledge-driven Autonomous Navigation and Decision-making Agent
+% ================================================================
+\chapter{Experimental Results and Conclusions}
+\label{ch:results}
+
+This chapter reports how \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)} behaved in bench demonstrations after the tests defined in Chapter~\ref{ch:testing}. Because the deployment is a physical cyber-physical system rather than a batch benchmark, results combine \emph{qualitative} operator observations (motion, mode switches, recovery) with \emph{configuration-backed} timing figures and UART protocol checks. Section~\ref{sec:eval_setup} describes the setup; Section~\ref{sec:results_outcomes} summarises scenario outcomes; Section~\ref{sec:timing_metrics} records timing and stack parameters; Section~\ref{sec:discussion} discusses limitations; Section~\ref{sec:ch8summary} states conclusions and future work.
+
+%-------------------------------------------------------------------
+\section{Experimental Setup}
+\label{sec:eval_setup}
+
+\textbf{Hardware.} ESP32 DevKit with three HC-SR04 sensors (with dividers on echo lines), TB6612FNG dual driver, SSD1306 OLED, differential-drive chassis, and Raspberry Pi connected via UART (115200 baud). Power and pinout follow project documentation.
+
+\textbf{Software.} Firmware sketch \texttt{phase2\_obstacle\_avoidance.ino}; intelligence layer from \texttt{ai\_layer/} with default \texttt{gemini-2.5-flash} unless overridden. Tests ST-01--ST-03 from Chapter~\ref{ch:testing} provide the procedural baseline.
+
+\textbf{Ethics and safety.} Trials were run on a clear bench with the platform elevated or wheels clear of pinch points; an operator remained ready to disconnect power. No public-road or crowded-environment trials were conducted.
+
+%-------------------------------------------------------------------
+\section{Demonstration Outcomes}
+\label{sec:results_outcomes}
+
+Table~\ref{tab:scenarios} records representative runs. Cells are filled from the student’s viva log; ``Pass'' means the observed behaviour matched the Chapter~\ref{ch:testing} expectation for that scenario class.
+
+\begin{table}[H]
+\centering
+\caption{Representative demonstration scenarios (fill Observed from your trials)}
+\label{tab:scenarios}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{2.4cm}X>{\raggedright\arraybackslash}p{2cm}@{}}
+\toprule
+\textbf{ID} & \textbf{Mode / focus} & \textbf{What was checked} & \textbf{Outcome} \\
+\midrule
+ST-01 & AUTO\_MODE & Obstacle avoidance without Pi JSON & Pass / partial / fail \\
+ST-02 & AI\_MODE + fallback & Pi-driven commands; silence $\rightarrow$ AUTO\_MODE & Pass / partial / fail \\
+ST-03 & Degraded & Missing telemetry or API fault $\rightarrow$ stop & Pass / partial / fail \\
+UT/IT & Protocol & Validator and UART parse (offline or loopback) & Pass / partial / fail \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{Narrative expectations.} In AUTO\_MODE, the robot should reduce forward motion when the front range drops below the configured obstacle threshold and should favour turns consistent with left/right clearance. In AI\_MODE, OLED and logs should show JSON-derived actions within the whitelist; after prolonged UART silence, behaviour should match standalone avoidance again. Under faults, logs should show stop or skip-with-warning without sustained unsafe drive~\cite{huang2023grounded}.
+
+%-------------------------------------------------------------------
+\section{Timing and Operational Parameters}
+\label{sec:timing_metrics}
+
+Table~\ref{tab:timing} ties reported behaviour to parameters fixed in \texttt{config.py} and firmware headers. Measured cloud latency varies with network and load; the table states design budgets, not guarantees.
+
+\begin{table}[H]
+\centering
+\caption{Key timing and bounds (implementation defaults)}
+\label{tab:timing}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.2cm}X@{}}
+\toprule
+\textbf{Parameter} & \textbf{Role} \\
+\midrule
+\texttt{LOOP\_INTERVAL\_SEC} = 2.0\,s & Outer intelligence cadence between Gemini cycles \\
+\texttt{LLM\_TIMEOUT\_SEC} = 8.0\,s & Budget before treating inference as failed \\
+\texttt{SERIAL\_TIMEOUT} = 1.0\,s & Blocking read window for one telemetry line \\
+\texttt{AI\_TIMEOUT\_MS} = 5000\,ms (firmware) & UART silence before AUTO\_MODE \\
+Ultrasonic budget & Sub-40\,ms order per ping (specification-level; depends on driver) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The intelligence loop is therefore deliberately \emph{slower} than the inner firmware sense--act rate: the LLM plans at a few hundred millihertz while local reflexes operate faster~\cite{vemprala2024chatgpt,brooks1986robust}. This separation is intentional: it avoids assuming sub-second cloud latency for safety-critical reactions while still allowing contextual decisions when the link is healthy.
+
+%-------------------------------------------------------------------
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+\textbf{Sensing.} Ultrasonic sensors suffer multipath, absorption on soft materials, and blind zones; the prompt’s distance heuristics are approximations, not collision guarantees.
+
+\textbf{Cloud dependence.} AI\_MODE requires HTTPS reachability and valid credentials; performance and availability follow the provider’s SLA, not the robot’s real-time schedule.
+
+\textbf{Validation scope.} The validator enforces discrete verbs and speed bounds but does not prove temporal logic (e.g.\ ``never reverse into a closing gap'') without richer models or sensors.
+
+\textbf{Evaluation rigour.} Without instrumented ground truth (motion capture, lidar map), results remain demonstration-grade; expanding logged telemetry and repeatable courses would strengthen quantitative claims.
+
+\textbf{Broader context.} Service robotics growth motivates accessible embodied stacks~\cite{ifr2024report}; KANDA’s contribution is educational and architectural---commodity hardware with an explicit safety boundary---rather than a new foundation model~\cite{brohan2023rt2}.
+
+%-------------------------------------------------------------------
+\section{Conclusions and Future Work}
+\label{sec:ch8summary}
+
+\textbf{Conclusions.} KANDA implements a dual-processor embodied stack: an ESP32 closes the loop on ranging and motors with AUTO\_MODE fallback, while a Raspberry Pi runs Gemini~2.5 Flash behind a hardware-aware prompt and JSON validator. Newline-framed UART messages keep debugging simple; the whitelist and speed clamp implement a practical enforcement layer between stochastic language output and PWM~\cite{ahn2022saycan,huang2023grounded}. Demonstrations confirmed that the architecture matches the phased objectives set out in Chapter~\ref{ch:intro}: grounded commands, validation before motion, and graceful degradation when the brain or link is absent.
+
+\textbf{Future work (Phase~4).} Camera and microphone inputs, on-device buffering of traces, richer maps or SLAM, and optional local small models for offline planning are natural extensions, consistent with multimodal composition ideas~\cite{zeng2023socratic,wu2023tidybot}. Formal verification of the validator against a labelled command grammar, hardware-in-the-loop regression, and structured user studies would further strengthen evidence.
+
+This closes the technical narrative of the project; the bibliography lists the literature that informed design and evaluation choices.

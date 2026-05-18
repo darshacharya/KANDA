@@ -1,0 +1,156 @@
+% ================================================================
+%  Chapter 6 — Implementation (KANDA)
+%  Knowledge-driven Autonomous Navigation and Decision-making Agent
+% ================================================================
+\chapter{Implementation}
+\label{ch:impl}
+
+This chapter describes how \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)} was implemented on the dual-processor stack described in Chapters~\ref{ch:hld} and~\ref{ch:detail}: language and tool choices, repository layout, the UART and JSON protocols, firmware behaviour on the ESP32, the Python intelligence layer on the Raspberry Pi, representative code excerpts, and practical difficulties encountered during integration.
+
+%-------------------------------------------------------------------
+\section{Languages, Tools, and Platforms}
+\label{sec:lang_platform}
+
+\subsection{Embodiment layer}
+
+Firmware targets the ESP32 using the \textbf{Arduino framework} with Espressif's Arduino core (v3 or newer) so that PWM, GPIO, and I\textsuperscript{2}C APIs match classroom and hobbyist practice while retaining access to the native peripherals~\cite{espressif2023esp32}. The sketch \texttt{phase2\_obstacle\_avoidance.ino} is edited and flashed with the \textbf{Arduino IDE} or \textbf{PlatformIO}. Libraries used in the shipped configuration include \texttt{Wire}, \texttt{Adafruit\_SSD1306}, \texttt{Adafruit\_GFX}, and \texttt{ArduinoJson} for OLED and inbound JSON parsing.
+
+\subsection{Intelligence layer}
+
+The companion computer runs \textbf{Linux} (Raspberry Pi OS or equivalent) with \textbf{Python~3.10+}. Dependencies are minimal by design: \texttt{google-generativeai} for Gemini access and \texttt{pyserial} for UART~\cite{vemprala2024chatgpt}. No separate web stack or database is required for the baseline closed-loop demo; configuration is read from environment variables and the central \texttt{config.py} module.
+
+\begin{table}[H]
+\centering
+\caption{Implementation stack summary}
+\label{tab:impl_stack}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.8cm}X@{}}
+\toprule
+\textbf{Artifact} & \textbf{Technology} \\
+\midrule
+MCU firmware & C++ (Arduino), ESP32, TB6612FNG, HC-SR04$\times$3, SSD1306 \\
+Pi runtime & Python~3, \texttt{venv} or system packages, process supervisor optional \\
+Cloud LLM & Google Gemini API (default \texttt{gemini-2.5-flash}) \\
+Serial link & UART 115200 baud, 8N1, newline-framed lines \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%-------------------------------------------------------------------
+\section{Repository and Module Layout}
+\label{sec:repo}
+
+The project groups firmware and intelligence code under a single repository root:
+
+\begin{itemize}[nosep]
+  \item \texttt{firmware/phase2\_obstacle\_avoidance/} --- single \texttt{.ino} sketch, obstacle logic, AI command executor, telemetry formatting.
+  \item \texttt{ai\_layer/} --- \texttt{main.py} (orchestrator), \texttt{config.py}, \texttt{uart\_bridge.py}, \texttt{context\_builder.py}, \texttt{llm\_client.py}, \texttt{safety\_validator.py}.
+  \item \texttt{docs/} --- pin and power notes for reproducible wiring.
+\end{itemize}
+
+The intelligence layer follows a linear import graph: the orchestrator imports all other modules; \texttt{llm\_client} and \texttt{uart\_bridge} depend only on \texttt{config} and standard libraries, which keeps bring-up on a fresh Pi to installing two packages and exporting \texttt{GEMINI\_API\_KEY}.
+
+%-------------------------------------------------------------------
+\section{Serial Protocol and Message Formats}
+\label{sec:protocol}
+
+\textbf{Telemetry (ESP32 $\rightarrow$ Pi).} Each cycle the firmware prints one ASCII line:
+\texttt{F:<cm> L:<cm> R:<cm> -> <LABEL>}, where distances are in centimetres and \texttt{<LABEL>} mirrors the current motion decision string for operator traceability. The Pi's \texttt{read\_telemetry()} splits on \texttt{->}, tokenises \texttt{F:}, \texttt{L:}, and \texttt{R:}, and returns a dictionary of floats plus the trailing action string.
+
+\textbf{Commands (Pi $\rightarrow$ ESP32).} Valid lines are a single JSON object per line, e.g.\ \texttt{\{"action":"forward","speed":120\}}, UTF-8 encoded, terminated by \texttt{\textbackslash n}. The firmware uses \texttt{deserializeJson} into a small static document, reads \texttt{action} and \texttt{speed}, clamps speed to $[0,255]$, and dispatches to motor primitives.
+
+This contract keeps the wire format debuggable in a serial console while remaining strict enough for deterministic parsing on both sides~\cite{vemprala2024chatgpt}.
+
+%-------------------------------------------------------------------
+\section{Firmware Implementation Highlights}
+\label{sec:impl_fw}
+
+Ultrasonic ranging uses a standard trigger pulse and \texttt{pulseIn} on echo pins; input-only GPIO (e.g.\ 34, 35) are used for echoes with resistor dividers documented in hardware notes. Motor direction uses paired digital outputs per half-bridge; speed uses LEDC PWM at 1\,kHz with 8-bit duty resolution on the core v3 API (\texttt{ledcAttach}).
+
+\textbf{AI execution.} Function \texttt{executeAiCommand} parses JSON, applies \texttt{constrain} on speed, and maps seven string actions to \texttt{forward}, \texttt{backward}, pivots, \texttt{slightLeft}/\texttt{slightRight} (asymmetric PWM while holding forward direction bits), or full stop.
+
+\textbf{Mode logic.} Successful JSON reception switches to \texttt{AI\_MODE} and refreshes a millis timer; exceeding \texttt{AI\_TIMEOUT\_MS} without a new line returns control to rule-based \texttt{AUTO\_MODE} so the vehicle retains basic safety without the Pi~\cite{brooks1986robust}.
+
+\begin{lstlisting}[language=C++, basicstyle=\ttfamily\footnotesize, caption={Excerpt: JSON command dispatch on ESP32 (simplified)}, label={lst:fw_json}]
+bool executeAiCommand(const String& jsonLine) {
+  StaticJsonDocument<128> doc;
+  if (deserializeJson(doc, jsonLine)) return false;
+  const char* action = doc["action"] | "stop";
+  int spd = doc["speed"] | speedVal;
+  spd = constrain(spd, 0, 255);
+  setSpeed(spd);
+  if      (!strcmp(action, "forward"))       forward();
+  else if (!strcmp(action, "slight_left"))   slightLeft();
+  else if (!strcmp(action, "slight_right"))  slightRight();
+  else if (!strcmp(action, "stop"))          stopMotors();
+  // ... remaining actions ...
+  return true;
+}
+\end{lstlisting}
+
+%-------------------------------------------------------------------
+\section{Intelligence Layer Implementation}
+\label{sec:impl_ai}
+
+\subsection{Configuration}
+
+\texttt{config.py} reads \texttt{KANDA\_SERIAL\_PORT}, \texttt{GEMINI\_API\_KEY}, and \texttt{GEMINI\_MODEL}, and defines \texttt{VALID\_ACTIONS}, \texttt{LOOP\_INTERVAL\_SEC}, \texttt{LLM\_TIMEOUT\_SEC}, and speed bounds. Centralising limits ensures the validator and prompt stay aligned~\cite{huang2023grounded}.
+
+\subsection{Prompting and inference}
+
+\texttt{context\_builder.py} prepends a fixed hardware-and-safety brief (valid verbs, speed range, distance heuristics) and appends live front/left/right readings. \texttt{llm\_client.py} configures \texttt{GenerativeModel}, calls \texttt{generate\_content} with temperature~0.2 and \texttt{max\_output\_tokens}=64, then strips optional markdown fences and extracts the first JSON object with a regular expression before \texttt{json.loads}~\cite{ahn2022saycan}.
+
+\subsection{Validation and actuation}
+
+\texttt{safety\_validator.validate} never raises: it returns either the cleaned command or a stop dictionary. The orchestrator then calls \texttt{UARTBridge.send\_command}. Listing~\ref{lst:val_py} shows the clamping behaviour for out-of-range speed.
+
+\begin{lstlisting}[language=Python, caption={Speed coercion and clamping in the validator}, label={lst:val_py}]
+def validate(cmd: Any) -> dict:
+    if not isinstance(cmd, dict):
+        return {"action": "stop", "speed": 0}
+    action = cmd.get("action")
+    speed = cmd.get("speed", config.DEFAULT_SPEED)
+    if not isinstance(action, str) or action not in config.VALID_ACTIONS:
+        return {"action": "stop", "speed": 0}
+    try:
+        speed = int(speed)
+    except (TypeError, ValueError):
+        return {"action": "stop", "speed": 0}
+    speed = max(config.SPEED_MIN, min(config.SPEED_MAX, speed))
+    return {"action": action, "speed": speed}
+\end{lstlisting}
+
+\subsection{Orchestrator loop}
+
+\texttt{main.py} opens the serial port, applies a short post-open delay for MCU reset, registers signal handlers that send \texttt{stop} on SIGINT/SIGTERM, and loops: read telemetry, short-circuit to stop if parse fails, build prompt, call Gemini inside try/except, validate, transmit, sleep for \texttt{LOOP\_INTERVAL\_SEC}. Exceptions per cycle trigger stop but keep the process alive for the next iteration.
+
+%-------------------------------------------------------------------
+\section{Difficulties Encountered and Mitigations}
+\label{sec:difficulties}
+
+\begin{description}[style=nextline]
+  \item[Serial bring-up] USB-UART adapters versus GPIO UART on the Pi require different device nodes; exposing \texttt{KANDA\_SERIAL\_PORT} avoids hard-coding paths.
+
+  \item[ESP32 reset on open] A fixed delay after \texttt{Serial} open on the Pi lets the bootloader finish before the first command.
+
+  \item[Non-JSON or fenced LLM output] Regex-based JSON extraction and low temperature reduce parse failures; the validator maps all failures to stop~\cite{huang2023grounded}.
+
+  \item[Stochastic latency] Cloud round-trip time exceeds the ultrasonic control period; the architecture treats LLM planning as a slow outer loop while firmware enforces local timeouts and AUTO\_MODE fallback.
+
+  \item[5\,V sensor echoes] HC-SR04 echo lines are level-shifted before ESP32 inputs to avoid violating 3.3\,V tolerance.
+
+  \item[API credentials] Keys are supplied only via environment variables to keep secrets out of version control.
+\end{description}
+
+%-------------------------------------------------------------------
+\section{Build and Run Procedure}
+\label{sec:run}
+
+\textbf{Firmware:} Select the ESP32 board profile, set the correct USB port, compile, and upload \texttt{phase2\_obstacle\_avoidance.ino}. Confirm OLED initialisation and serial banner at 115200 baud.
+
+\textbf{Pi:} Install Python dependencies (\texttt{pip install google-generativeai pyserial}), export \texttt{GEMINI\_API\_KEY}, optionally \texttt{GEMINI\_MODEL} and \texttt{KANDA\_SERIAL\_PORT}, then run \texttt{python3 main.py} from \texttt{ai\_layer/}. Verify telemetry lines in the log before trusting motion.
+
+%-------------------------------------------------------------------
+\section{Summary}
+\label{sec:ch6summary}
+
+This chapter recorded the concrete implementation of KANDA: Arduino C++ firmware with JSON actuation and dual-mode policy, Python modules for UART, hardware-aware prompting, Gemini inference, and mandatory validation, plus the newline-delimited serial contract linking the two runtimes. Configuration and failure handling prioritise safe stop behaviour over aggressive motion~\cite{vemprala2024chatgpt,huang2023grounded}. Standalone test blocks at the bottom of \texttt{safety\_validator.py} and \texttt{uart\_bridge.py}, plus serial console traces, served as informal regression checks during integration; Chapter~\ref{ch:testing} formalises the test strategy and requirement mapping.

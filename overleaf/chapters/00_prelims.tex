@@ -1,0 +1,182 @@
+% ================================================================
+    %  00_prelims.tex — Title, Certificate, Acknowledgement, Abstract,
+    %                    ToC, List of Figures/Tables, Glossary
+    % ================================================================
+
+    % ---- TITLE PAGE ----
+    \begin{titlepage}
+        \begin{center}
+        \vspace*{1cm}
+    
+        {\large\bfseries Minor Project Report}\\[4pt]
+        {\large\bfseries on}\\[8pt]
+        {\Large\bfseries ``\ProjectTitle''}\\[20pt]
+    
+        {\large\bfseries MIT422P}\\[24pt]
+    
+        Submitted by\\[6pt]
+        {\large\bfseries \StudentName}\\
+        \USN\\[24pt]
+    
+        Under the Guidance of\\[6pt]
+        {\large\bfseries \GuideName}\\
+        Assistant Professor\\
+        \Dept\\
+        \College\\
+        Bengaluru-560059\\[24pt]
+    
+        Submitted in partial fulfillment for the award of degree of\\[6pt]
+        {\large\bfseries MASTER OF TECHNOLOGY}\\
+        in\\
+        {\large\bfseries INFORMATION TECHNOLOGY}\\[12pt]
+    
+        \MakeUppercase{\Dept}\\
+        \MakeUppercase{\College}\\[6pt]
+        \AcademicYear
+    
+        \end{center}
+        \end{titlepage}
+    
+        % ---- CERTIFICATE (placeholder) ----
+        \newpage
+        \thispagestyle{empty}
+        \begin{center}
+        {\Large\bfseries\College}\\[4pt]
+        {\small(Autonomous Institution Affiliated to Visvesvaraya Technological University, Belagavi)}\\[12pt]
+        {\large\bfseries\MakeUppercase{\Dept}}\\
+        Bengaluru--560059\\[20pt]
+        {\Large\bfseries CERTIFICATE}
+        \end{center}
+        \vspace{12pt}
+        Certified that the minor project work titled ``\ProjectTitle'' carried out by \textbf{\StudentName}, \USN, a bonafide student, submitted in partial fulfillment for the award of Master of Technology in Information Technology of Visvesvaraya Technological University, Belagavi, during the academic year \AcademicYear. It is certified that all corrections/suggestions indicated during the viva have been incorporated in the report. The project report has been approved as it satisfies the academic requirements in respect of the project work prescribed for the said degree.
+    
+        \vspace{36pt}
+        \begin{tabular}{p{0.45\textwidth}p{0.45\textwidth}}
+        \textbf{\GuideName} & \textbf{Dr. G.\,S.\,Mamatha} \\
+        Internal Guide & Head of Department \\
+        Assistant Professor & \Dept \\
+        \Dept & \\
+        \end{tabular}
+    
+        \vspace{36pt}
+        \noindent\textbf{External Examiner:}\hfill Date: \rule{3cm}{0.4pt}
+    
+        % ---- DECLARATION ----
+        \newpage
+        \thispagestyle{empty}
+        \begin{center}
+        {\Large\bfseries\College}\\[4pt]
+        {\small(Autonomous Institution Affiliated to Visvesvaraya Technological University, Belagavi)}\\[12pt]
+        {\large\bfseries\MakeUppercase{\Dept}}\\
+        Bengaluru--560059\\[20pt]
+        {\Large\bfseries DECLARATION}
+        \end{center}
+        \vspace{12pt}
+        I, \StudentName, student of M.Tech in Information Technology, Department of ISE, \College, Bengaluru declare that the Minor Project titled ``\ProjectTitle'', has been carried out by me and submitted in partial fulfillment of the requirements for the award of the degree of Master of Technology in Information Technology.
+    
+        I further declare that the project work is a result of my own effort and has not been submitted to any other university or institution for the award of any degree or diploma.
+    
+        \vspace{36pt}
+        \begin{flushright}
+        \textbf{\StudentName}\\
+        Information Technology\\
+        \Dept\\
+        \College, Bengaluru-59
+        \end{flushright}
+    
+        % ---- ACKNOWLEDGEMENT ----
+        \newpage
+        \thispagestyle{empty}
+        \begin{center}
+        {\Large\bfseries ACKNOWLEDGEMENT}
+        \end{center}
+        \addcontentsline{toc}{chapter}{Acknowledgement}
+        \vspace{12pt}
+    
+        It needs more than these few words to express the immense gratitude and profound thanks to the people who gave all their valuable comments, suggestions and encouragement, making this work cruise smoothly along the path and rewarding the effort with success.
+    
+        I would like to express sincere gratitude to my guide, \textbf{\GuideName}, Assistant Professor, \Dept, \College, Bengaluru, for valuable guidance, expert review and constant encouragement in choosing this domain and support throughout the project.
+    
+        I would also like to express my sincere gratitude to \textbf{Dr.\ Padmashree~T}, Associate Professor and Associate Dean (PG Studies) and \textbf{Dr.\ G.\,S.\,Mamatha}, Professor and Head of the Department, Information Science \& Engineering, \College, Bengaluru, for the encouragement and support for the project.
+    
+        I thank \textbf{Dr.\ K\,N\,Subramanya}, Principal, \College, Bengaluru, for his valuable input for the project and for his moral support.
+    
+        I also thank my family and all the faculty members of the \Dept\ for their constant support and encouragement. Lastly, I would like to thank my professors, staff of ISE Department and colleagues who gave their valuable suggestions in the improvement of my project.
+    
+        \begin{flushright}
+        \textbf{\StudentName}\\
+        Information Technology\\
+        Dept.\ of ISE\\
+        \College, Bengaluru-59
+        \end{flushright}
+    
+        % ---- ABSTRACT ----
+        \newpage
+        \thispagestyle{empty}
+        \begin{center}
+        {\Large\bfseries ABSTRACT}
+        \end{center}
+        \addcontentsline{toc}{chapter}{Abstract}
+        \vspace{12pt}
+    Autonomous mobile robots have traditionally relied on rule-based control systems that map sensor inputs to motor outputs through hand-crafted conditional logic. While effective for narrow, well-defined environments, such systems lack the ability to reason about novel situations, interpret ambiguous stimuli, or adapt behaviour based on contextual understanding. Simultaneously, Large Language Models (LLMs) have demonstrated remarkable contextual reasoning and structured output generation capabilities, but deploying them for real-time robot control requires bridging the semantic gap between language-based reasoning and physical hardware constraints. Without explicit hardware grounding, LLMs may generate physically impossible, unsafe, or malformed commands that cannot be executed by the robot's actuators.
+
+    In this work, we present Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA), a multimodal embodied robot agent powered by LLMs with hardware-aware action generation. The system implements a dual-processor architecture in which an ESP32 microcontroller serves as the physical executor (body) handling real-time sensor acquisition and motor control, while a Raspberry Pi serves as the cognitive reasoner (brain) running Google Gemini 2.5 Flash. The system operates as a closed-loop sense--reason--validate--act pipeline: three ultrasonic sensors measure the environment, telemetry is transmitted via UART to the Raspberry Pi, a hardware-description prompt encoding the robot's capabilities and constraints aligns model behaviour with the physical platform, the model returns a structured JSON motion command, and a deterministic safety layer validates and clamps that command before driving the motors---closing the gap between open-ended language-model outputs and hard actuator constraints. The safety validator enforces an action whitelist, clamps speed to the permissible range, and substitutes a safe fallback on any validation failure. The ESP32 firmware implements dual-mode operation, automatically falling back to rule-based obstacle avoidance when the LLM is unavailable. The system was built on commodity hardware at a total cost below \$50, demonstrating that LLM-driven embodied intelligence is achievable without specialised robotic platforms or GPU-equipped onboard computers.
+    
+        % ---- TABLE OF CONTENTS ----
+        \newpage
+        \pagestyle{fancy}
+        \fancypagestyle{plain}{%
+        \fancyhf{}
+        \renewcommand{\headrulewidth}{3pt}
+        \renewcommand{\footrulewidth}{3pt}
+        \fancyhead[C]{\hspace{0pt}}%
+        \fancyfoot[L]{\small M.Tech in Information Technology}
+        \fancyfoot[C]{\small\AcademicYear}
+        \fancyfoot[R]{\small\thepage}
+        }
+        \tableofcontents
+    
+        % ---- LIST OF FIGURES ----
+        \newpage
+        \listoffigures
+        \addcontentsline{toc}{chapter}{List of Figures}
+    
+        % ---- LIST OF TABLES ----
+        \newpage
+        \listoftables
+        \addcontentsline{toc}{chapter}{List of Tables}
+    
+        % ---- GLOSSARY ----
+        \newpage
+        \begin{center}
+        {\Large\bfseries GLOSSARY}
+        \end{center}
+        \addcontentsline{toc}{chapter}{Glossary}
+        \vspace{12pt}
+    
+        \begin{longtable}{@{}l@{\hspace{1em}:\hspace{1em}}l@{}}
+        KANDA  & Knowledge-driven Autonomous Navigation and Decision-making Agent \\
+        LLM    & Large Language Model \\
+        AI     & Artificial Intelligence \\
+        API    & Application Programming Interface \\
+        JSON   & JavaScript Object Notation \\
+        UART   & Universal Asynchronous Receiver-Transmitter \\
+        GPIO   & General Purpose Input/Output \\
+        PWM    & Pulse Width Modulation \\
+        I2C    & Inter-Integrated Circuit \\
+        OLED   & Organic Light-Emitting Diode \\
+        BMS    & Battery Management System \\
+        DFD    & Data Flow Diagram \\
+        SRS    & Software Requirement Specification \\
+        ESP32  & Espressif Systems 32-bit Microcontroller \\
+        HC-SR04 & Ultrasonic Distance Sensor Module \\
+        TB6612FNG & Toshiba Dual H-Bridge Motor Driver IC \\
+        SSD1306 & Solomon Systech OLED Display Driver \\
+        LiPo   & Lithium Polymer (battery) \\
+        LEDC   & LED Control (ESP32 PWM peripheral) \\
+        NLP    & Natural Language Processing \\
+        IoT    & Internet of Things \\
+        SLAM   & Simultaneous Localisation and Mapping \\
+        USB    & Universal Serial Bus \\
+        CSV    & Comma-Separated Values \\
+        \end{longtable}

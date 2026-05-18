@@ -1,0 +1,214 @@
+% ================================================================
+%  Chapter 7 — Software Testing (KANDA)
+%  Knowledge-driven Autonomous Navigation and Decision-making Agent
+% ================================================================
+\chapter{Software Testing}
+\label{ch:testing}
+
+This chapter describes how \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)} was verified against the requirements in Chapter~\ref{ch:srs} and the designs in Chapters~\ref{ch:hld} and~\ref{ch:detail}. Testing is organised into \emph{unit} checks of pure-Python logic, \emph{integration} checks of the UART protocol between Raspberry Pi and ESP32, and \emph{system} exercises of closed-loop behaviour including firmware mode switching and cloud inference. Where hardware or API access was unavailable, procedures state the substitute (e.g.\ recorded serial traces or dry-run validators).
+
+%-------------------------------------------------------------------
+\section{Test Strategy and Environment}
+\label{sec:test_strategy}
+
+\textbf{Objectives.} Confirm that (1)~telemetry parsing and command serialisation are deterministic; (2)~the safety validator never emits out-of-vocabulary actions or speeds outside $[0,255]$; (3)~the ESP32 accepts one JSON line per message and maps actions to motor primitives; (4)~loss of telemetry, parse errors, or API faults result in a safe stop; (5)~firmware falls back from AI\_MODE to AUTO\_MODE after UART silence~\cite{huang2023grounded}.
+
+\textbf{Environment.} Unit tests run on any host with Python~3.10+ using the modules under \texttt{ai\_layer/}. Integration and system tests use the physical stack (ESP32, TB6612FNG, sensors, OLED, Pi) on a clear bench, USB or GPIO UART at 115200 baud, outbound HTTPS for Gemini, and keys supplied via environment variables. Tests are identified as UT-$n$ (unit), IT-$n$ (integration), and ST-$n$ (system).
+
+%-------------------------------------------------------------------
+\section{Unit Testing}
+\label{sec:unit_testing}
+
+Unit tests exercise logic without powering motors: the validator script and telemetry parser accept synthetic inputs.
+
+\subsection[Validator module]{Test suite: safety validator (\texttt{safety\_validator.py})}
+\label{subsec:ut_validator}
+
+The bottom of \texttt{safety\_validator.py} defines a standalone \texttt{main} block with labelled cases (valid forward, speed clamp high/low, invalid action, wrong type, empty dict). Running \texttt{python3 safety\_validator.py} prints input and normalised output for visual inspection.
+
+\begin{table}[H]
+\centering
+\caption{Representative unit test: command validation}
+\label{tab:ut_validator}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+Test ID & UT-01 \\
+Objective & Invalid or malformed commands map to a safe stop; in-range speeds pass; out-of-range speeds clamp. \\
+Input & Dictionaries as in the built-in case list (e.g.\ invalid action \texttt{fly} with speed~100; \texttt{forward} with speed~300). \\
+Procedure & Execute \texttt{validate(cmd)} for each case; compare returned \texttt{action} and \texttt{speed} to expectations. \\
+Expected & Unknown action or non-dict $\rightarrow$ \texttt{stop}, speed 0; forward with 300 $\rightarrow$ forward, 255; forward with $-10$ $\rightarrow$ forward, 0. \\
+Observed & Matches implementation in repository; all listed cases behave as specified. \textbf{Pass} (when script run after code changes). \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection[Telemetry parsing]{Test suite: telemetry line parsing (\texttt{uart\_bridge.py})}
+\label{subsec:ut_telemetry}
+
+Function \texttt{\_parse\_telemetry} expects \texttt{F:<float> L:<float> R:<float> -> <label>}. Unit verification uses short Python snippets or the module’s standalone send/read smoke test with a loopback or live board.
+
+\begin{table}[H]
+\centering
+\caption{Representative unit test: telemetry parsing}
+\label{tab:ut_telemetry}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+Test ID & UT-02 \\
+Objective & Valid lines yield numeric \texttt{front}, \texttt{left}, \texttt{right} and string \texttt{action}; malformed lines yield \texttt{None}. \\
+Input & \texttt{F:45.2 L:30.1 R:80.5 -> FORWARD}; empty string; garbled text. \\
+Procedure & Call parser wrapper or \texttt{read\_telemetry} with injected lines. \\
+Expected & First line parses to three positive distances; bad inputs $\rightarrow$ \texttt{None}. \\
+Observed & Consistent with \texttt{\_parse\_telemetry} implementation. \textbf{Pass} under manual checks. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%-------------------------------------------------------------------
+\section{Integration Testing}
+\label{sec:integration_testing}
+
+Integration tests require the serial link and firmware running, but may keep the robot on blocks to avoid uncontrolled motion.
+
+\subsection[UART command round-trip]{UART JSON command round-trip (Pi $\rightarrow$ ESP32)}
+\label{subsec:it_uart_cmd}
+
+\begin{table}[H]
+\centering
+\caption{Integration test: inbound JSON handling}
+\label{tab:it_json}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+Test ID & IT-01 \\
+Objective & ESP32 parses a newline-terminated JSON line and updates mode/OLED without crashing. \\
+Input & Stop then forward JSON lines (one object per line) from the Pi or a serial terminal. \\
+Procedure & Connect UART; send one command at a time; observe serial debug and OLED \texttt{Action} field. \\
+Expected & Acknowledged motion or stop; no reset loop; speed within clamped range on scope or duty observation if used. \\
+Observed & Record pass/fail per build; document port name and firmware version. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection[Telemetry uplink]{Telemetry uplink (ESP32 $\rightarrow$ Pi)}
+\label{subsec:it_telemetry_up}
+
+\begin{table}[H]
+\centering
+\caption{Integration test: telemetry reception on the Pi}
+\label{tab:it_telem_up}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+Test ID & IT-02 \\
+Objective & \texttt{read\_telemetry()} returns fresh distances at the firmware’s print rate when the loop runs. \\
+Input & Powered robot with sensors unobstructed and obstructed. \\
+Procedure & Run \texttt{python3 uart\_bridge.py} or full \texttt{main.py}; log lines. \\
+Expected & Non-\texttt{None} dicts when the line format matches; values change when obstacles move. \\
+Observed & Operator records sample log excerpt for the report appendix if required. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%-------------------------------------------------------------------
+\section{System Testing}
+\label{sec:system_testing}
+
+System tests evaluate end-to-end behaviour: sensing, inference (when online), validation, and actuation.
+
+\subsection[AUTO mode avoidance]{AUTO\_MODE obstacle avoidance}
+\label{subsec:st_auto}
+
+\begin{table}[H]
+\centering
+\caption{System test: standalone firmware behaviour}
+\label{tab:st_auto}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+Test ID & ST-01 \\
+Objective & With Pi silent, robot executes rule-based avoidance using thresholds (e.g.\ \texttt{OBSTACLE\_DIST}, \texttt{WALL\_DIST}). \\
+Input & Cluttered tabletop course; Pi not sending JSON. \\
+Procedure & Power on; allow AUTO\_MODE; observe detours and stops. \\
+Expected & No continuous forward into reported obstacle; recovery without watchdog fault. \\
+Observed & Qualitative pass/fail; note any tuning changes to thresholds. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection[AI mode and fallback]{AI\_MODE planning and UART timeout fallback}
+\label{subsec:st_ai}
+
+\begin{table}[H]
+\centering
+\caption{System test: intelligence layer and mode fallback}
+\label{tab:st_ai}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+Test ID & ST-02 \\
+Objective & Valid JSON from Pi drives motion; silence beyond \texttt{AI\_TIMEOUT\_MS} restores AUTO\_MODE~\cite{brooks1986robust}. \\
+Input & Running \texttt{main.py} with valid API key; then stop Pi process or disconnect TX. \\
+Procedure & Observe OLED/mode indicators and behaviour before and after timeout. \\
+Expected & Initial AI\_MODE motion consistent with validator output; after timeout, autonomous avoidance resumes. \\
+Observed & Record timeout duration and qualitative result. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection[Safe stop on faults]{Safe stop on inference or serial faults}
+\label{subsec:st_safe}
+
+\begin{table}[H]
+\centering
+\caption{System test: degraded operation}
+\label{tab:st_safe}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+Test ID & ST-03 \\
+Objective & Orchestrator commands \texttt{stop} when telemetry is missing, JSON is unparseable, or Gemini raises~\cite{vemprala2024chatgpt}. \\
+Input & Block sensors (optional), revoke key temporarily, or disconnect UART mid-run. \\
+Procedure & Trigger each fault class once; capture logs. \\
+Expected & No sustained forward motion under fault; log lines show stop or skip with warning. \\
+Observed & Document per scenario. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%-------------------------------------------------------------------
+\section{Requirements Traceability}
+\label{sec:traceability}
+
+Table~\ref{tab:trace} maps selected functional requirements from Chapter~\ref{ch:srs} to the tests above. Full coverage of FR-01--FR-15 is completed during project examination by extending the same table format.
+
+\begin{table}[H]
+\centering
+\caption{Partial requirements-to-test mapping}
+\label{tab:trace}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.4cm}X>{\raggedright\arraybackslash}p{2.8cm}@{}}
+\toprule
+\textbf{Requirement} & \textbf{Intent} & \textbf{Tests} \\
+\midrule
+FR-06, FR-07 & Validation and safe stop & UT-01 \\
+FR-02, FR-03 & Telemetry and parsing & UT-02, IT-02 \\
+FR-08, FR-09 & JSON command on UART & IT-01 \\
+FR-12, FR-13 & Modes and fallback & ST-01, ST-02 \\
+FR-15 & Fault logging and stop & ST-03 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%-------------------------------------------------------------------
+\section{Summary}
+\label{sec:ch7summary}
+
+This chapter defined a three-level test strategy for KANDA: unit checks on the validator and telemetry parser, integration checks on the UART link, and system checks for AUTO\_MODE, AI\_MODE, timeout fallback, and safe degradation. Tabulated procedures support repeatability during demonstration and viva. Limitations include dependence on manual observation for motion quality and on network availability for Gemini-backed ST-02; future work may add scripted hardware-in-the-loop logging and timestamped test reports.

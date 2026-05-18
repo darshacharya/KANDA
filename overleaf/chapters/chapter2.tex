@@ -1,0 +1,108 @@
+% ================================================================
+%  Chapter 2 — Theory and Concepts
+%  KANDA (Knowledge-driven Autonomous Navigation and Decision-making Agent)
+% ================================================================
+\chapter{Theory and Concepts}
+\label{ch:theory}
+
+This chapter presents the theoretical foundations and core concepts underlying \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)}. It covers embodied artificial intelligence, the use of Large Language Models (LLMs) for grounded robot control, the sense--reason--act architecture, proximal sensing with ultrasonic rangefinders, PWM-based motor actuation, UART serial communication between processors, and safety validation before physical execution. Each topic is tied to the literature where applicable and collectively justifies the architectural choices made in the implementation.
+
+%-------------------------------------------------------------------
+\section{Embodied Artificial Intelligence}
+\label{sec:embodied}
+
+\textbf{Embodied artificial intelligence} treats cognition as inherently coupled with a physical body embedded in an environment: perception, reasoning, and action form a closed loop rather than disembodied symbolic manipulation~\cite{driess2023palme}. Early mobile robotics demonstrated that robust behaviour can emerge from layered reactive control without explicit global planning~\cite{brooks1986robust}. Contemporary embodied AI systems increasingly combine low-level motor control with high-level semantic reasoning, often mediated by learning or language~\cite{brohan2023rt2}.
+
+For KANDA, embodiment implies three commitments: (1)~sensor readings reflect the robot's immediate physical situation; (2)~actuator commands change the world state and must respect mechanical and electrical limits; (3)~reasoning procedures must consume representations compatible with real hardware (finite vocabulary of actions, bounded speed, timing constraints).
+
+%-------------------------------------------------------------------
+\subsection{Affordance Grounding}
+\label{subsec:affordance}
+
+An \textit{affordance} is an action possibility offered by the environment relative to an agent's capabilities. SayCan~\cite{ahn2022saycan} formalised the idea that language commands should be paired with actions that are \textit{both} linguistically plausible and physically feasible on the current platform. PaLM-E~\cite{driess2023palme} showed that multimodal models can fuse language with robot state and visual context for manipulation and navigation tasks. RT-2~\cite{brohan2023rt2} extended vision-language models toward generalisable robot policies.
+
+KANDA instantiates a lightweight form of affordance grounding: the LLM is given an explicit inventory of legal motor primitives, speed bounds, and safety rules together with live sensor distances, so that generated commands remain within the robot's physical affordances without requiring a separate learned affordance model.
+
+%-------------------------------------------------------------------
+\section{Large Language Models for Robot Control}
+\label{sec:llm_robot}
+
+\textbf{Large Language Models (LLMs)} are transformer-based models trained to predict text conditioned on context~\cite{vaswani2017attention}. For robotics, the central challenge is not language fluency but \textit{grounding}: mapping semantic intent and contextual prompts to executable behaviours on a specific robot~\cite{vemprala2024chatgpt}.
+
+%-------------------------------------------------------------------
+\subsection{Transformers and Context Conditioning}
+\label{subsec:transformers}
+
+The transformer architecture uses self-attention to relate all positions in a sequence, enabling long-range dependencies and parallel training~\cite{vaswani2017attention}. At inference time, the model conditions its output on the provided prompt (hardware description, sensor readings, and instructions). Low temperature and constrained output formats (JSON) promote deterministic, parseable commands suitable for embedded consumption.
+
+%-------------------------------------------------------------------
+\subsection{Prompting as Program Specification}
+\label{subsec:prompting}
+
+Recent work treats natural-language prompts as partial specifications of robot APIs and environments. ProgPrompt~\cite{singh2023progprompt} generates situated programs from LLMs using declared functions and state; Code as Policies~\cite{liang2023code} generates executable code for control. ChatGPT for Robotics~\cite{vemprala2024chatgpt} emphasises clear API descriptions, chain-of-thought decomposition, and iterative correction.
+
+KANDA's hardware-description prompt follows this paradigm: it fixes the action vocabulary, enumerates safety constraints, and supplies numeric telemetry so the model output becomes a small structured command rather than unconstrained natural language.
+
+%-------------------------------------------------------------------
+\subsection{Grounded Decoding and Command-Level Validation}
+\label{subsec:grounded}
+
+Grounded decoding~\cite{huang2023grounded} combines language-model probabilities with feasibility signals during generation. KANDA applies an analogous idea \textit{after} generation: a deterministic validator filters LLM output before actuation. This separation keeps the LLM flexible while guaranteeing that only whitelisted actions and clamped speeds reach the motors.
+
+%-------------------------------------------------------------------
+\section{Sense--Reason--Act Architecture}
+\label{sec:sra}
+
+The classical \textbf{sense--reason--act} loop underlies most autonomous robots: sense the world, decide an action, execute it, repeat~\cite{brooks1986robust}. In KANDA:
+
+\begin{itemize}[nosep]
+  \item \textbf{Sense:} ESP32 samples HC-SR04 ultrasonic sensors and publishes distances.
+  \item \textbf{Reason:} Raspberry Pi builds a prompt, queries Gemini 2.5 Flash, obtains a JSON motion command.
+  \item \textbf{Act:} Validated command drives PWM outputs via the TB6612FNG to the motors.
+\end{itemize}
+
+When the reasoning layer is unavailable (API failure, timeout, or serial loss), the firmware reverts to autonomous rule-based avoidance---\textbf{graceful degradation} preserving safety while sacrificing LLM-mediated flexibility.
+
+%-------------------------------------------------------------------
+\section{Proximate Sensing with Ultrasonic Rangefinders}
+\label{sec:ultrasonic}
+
+The HC-SR04 module estimates distance by measuring round-trip time of flight of an ultrasonic pulse. A trigger pulse initiates emission; the echo signal returns after reflection from an obstacle. With speed of sound $v_s \approx 343\,\mathrm{m\,s^{-1}}$ at room temperature, one-way distance is approximately $d = \frac{1}{2} v_s \Delta t$, where $\Delta t$ is the measured interval between trigger and echo.
+
+\textbf{Practical considerations:} beam width and multipath reflections cause noise; soft or angled surfaces weaken echoes; cross-talk can occur with multiple units unless triggered sequentially. Voltage-level compatibility requires attenuating 5V logic from the sensor to ESP32 inputs (3.3V tolerant); KANDA uses resistor dividers on ECHO lines.
+
+%-------------------------------------------------------------------
+\section{PWM Actuation and Motor Drive}
+\label{sec:pwm}
+
+\textbf{Pulse Width Modulation (PWM)} controls average voltage to DC motors by switching power devices at a fixed frequency and varying duty cycle. The ESP32 LEDC peripheral generates PWM waveforms on GPIO pins~\cite{espressif2023esp32}. The TB6612FNG dual H-bridge accepts direction bits (AIN1/AIN2, BIN1/BIN2) and PWM speed inputs (PWMA, PWMB), enabling forward, reverse, and speed control for a two-wheel differential drive.
+
+\textbf{Differential steering:} opposite wheel speeds produce turning; equal speeds produce straight motion. KANDA maps discrete LLM actions---for example \texttt{forward}, \texttt{left}, or \texttt{slight\_right}---to coordinated patterns of direction and duty cycle in firmware.
+
+%-------------------------------------------------------------------
+\section{Inter-Processor Communication over UART}
+\label{sec:uart}
+
+\textbf{UART} (Universal Asynchronous Receiver-Transmitter) serial communication transmits framed bytes over TX/RX lines using an agreed baud rate (115,200 in KANDA). No separate clock line is required when timing is matched at both ends. JSON lines terminate with newline delimiters for message boundaries: telemetry from ESP32 to Pi, commands from Pi to ESP32.
+
+Structured commands reduce ambiguity compared to free text and permit robust parsing on resource-constrained firmware alongside optional ArduinoJson validation.
+
+%-------------------------------------------------------------------
+\section{Safety Validation for LLM-Generated Actions}
+\label{sec:safety_theory}
+
+Physical robots impose hard constraints: motors cannot execute undefined verbs; excessive speed risks collision or electrical stress; invalid JSON must not crash control loops. KANDA therefore implements \textbf{runtime validation}: (1)~schema and type checks on the parsed command; (2)~membership of \texttt{action} in a fixed set; (3)~numeric clamping of \texttt{speed} to $[0,255]$; (4)~fallback to \texttt{stop} on any fault.
+
+This aligns with the broader principle that AI-generated plans for cyber-physical systems require enforcement layers~\cite{huang2023grounded,ahn2022saycan}. The validator acts as a sandbox between stochastic LLM output and deterministic hardware.
+
+%-------------------------------------------------------------------
+\section{Multimodal Extension (Conceptual)}
+\label{sec:multimodal}
+
+Socratic Models~\cite{zeng2023socratic} compose multiple foundation models via natural language. KANDA's roadmap (Phase~4) follows this direction: camera and speech modalities would extend the prompt while preserving the same validation boundary. Works on long-horizon LLM control~\cite{wake2023gptrobot} and household assistance~\cite{wu2023tidybot} inform future scaling beyond single-step JSON commands.
+
+%-------------------------------------------------------------------
+\section{Summary}
+\label{sec:ch2summary}
+
+This chapter established the theoretical basis for KANDA. Embodied AI and affordance grounding~\cite{driess2023palme,ahn2022saycan,brohan2023rt2} motivate coupling language reasoning with hardware-aware commands. Transformer-based LLMs~\cite{vaswani2017attention} and robotics-oriented prompting practices~\cite{vemprala2024chatgpt,liang2023code,singh2023progprompt} justify the context-builder design; grounded decoding ideas~\cite{huang2023grounded} motivate post-hoc validation. The sense--reason--act pattern~\cite{brooks1986robust} organises the runtime loop. Ultrasonic time-of-flight sensing, PWM motor drive via ESP32~\cite{espressif2023esp32}, and UART-delimited JSON provide the physical and communication substrate. Finally, command-level safety filtering ensures that only feasible actions reach the actuators, completing the conceptual bridge between LLM reasoning and embodied execution.

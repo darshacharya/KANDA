@@ -1,0 +1,334 @@
+% ================================================================
+%  Chapter 4 — High Level Design (KANDA)
+%  Knowledge-driven Autonomous Navigation and Decision-making Agent
+% ================================================================
+\chapter{High Level Design}
+\label{ch:hld}
+
+This chapter presents the high-level design of \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)}. It records design considerations that follow from the Software Requirement Specification (Chapter~3), the phased development approach, architectural strategies for the dual-processor stack, an overview diagram of the layered architecture, and data flow diagrams at three levels of abstraction. The design separates real-time embodiment on the ESP32 from asynchronous language-model inference on the Raspberry Pi, with an explicit validation boundary before actuation~\cite{brooks1986robust,huang2023grounded}.
+
+%-------------------------------------------------------------------
+\section{Design Considerations}
+\label{sec:design}
+
+%-------------------------------------------------------------------
+\subsection{General Considerations}
+\label{subsec:general}
+
+The following considerations shaped the high-level design of KANDA:
+
+\textbf{Safety before motion:} Large language model outputs are stochastic; direct execution on hardware would risk invalid verbs, out-of-range speeds, or malformed structures~\cite{ahn2022saycan}. Every candidate command therefore passes through schema checks, membership in a finite action set, and numeric clamping before PWM or direction pins change~\cite{huang2023grounded}.
+
+\textbf{Layered embodied architecture:} Sense--reason--act behaviour is organised into layers---physical sensing and actuation, microcontroller execution, serial messaging, and companion-computer reasoning---consistent with layered control for mobile robots~\cite{brooks1986robust}. Each layer exposes narrow interfaces (telemetry lines, JSON lines) so responsibilities remain traceable.
+
+\textbf{Timing separation:} Ultrasonic sampling and motor PWM require deterministic loops on the ESP32; inference over HTTPS to Gemini is asynchronous and variable in latency~\cite{vemprala2024chatgpt}. The architecture never assumes sub-second LLM latency for safety-critical reactions; firmware timeouts and AUTO\_MODE fallback preserve basic collision avoidance when the intelligence layer is slow or unavailable.
+
+\textbf{Structured command interface:} Motor intents are expressed only as single-line JSON objects with \texttt{action} and \texttt{speed}, aligning language-model outputs with executable motor primitives~\cite{vemprala2024chatgpt}. Natural language never crosses the UART boundary to firmware parsers.
+
+\textbf{Observability:} The intelligence layer logs cycles, telemetry summaries, raw model output (where enabled), validation outcomes, and errors on the Raspberry Pi. The OLED on the robot surfaces mode and behaviour for the operator.
+
+\textbf{Graceful degradation:} Loss of cloud connectivity or Python process failure must not leave motion undefined: firmware reverts to rule-based obstacle avoidance after a UART silence threshold while electrical limits remain enforced.
+
+%-------------------------------------------------------------------
+\subsection{Development Methods}
+\label{subsec:dev_methods}
+
+KANDA was developed using an \textbf{incremental phased methodology}: each phase delivers a working baseline before the next layer is added.
+
+\begin{description}[nosep]
+  \item[Phase 1, Foundations:] Problem formulation, literature survey, requirements and architecture sketches (Chapters~1--3).
+  \item[Phase 2, Embodiment layer:] ESP32 firmware with HC-SR04 sensing, TB6612FNG motor drive, SSD1306 display, voltage-divided ECHO inputs, and standalone obstacle-avoidance logic (AUTO\_MODE baseline).
+  \item[Phase 3, Intelligence layer:] Raspberry Pi hosts Python modules for UART I/O, hardware-aware prompt construction, Gemini API calls (default \textbf{Gemini 2.5 Flash}), JSON validation, and closed-loop command transmission; firmware extended for AI\_MODE with watchdog fallback.
+  \item[Phase 4 (future), Multimodal agent:] Camera, microphone, speaker, and richer planners---out of scope for the current high-level design baseline but anticipated using composed multimodal reasoning~\cite{zeng2023socratic,wu2023tidybot}.
+\end{description}
+
+%-------------------------------------------------------------------
+\section{Architectural Strategies}
+\label{sec:arch_strat}
+
+%-------------------------------------------------------------------
+\subsection{Programming Language and Runtime Selection}
+\label{subsec:lang}
+
+\textbf{Arduino-compatible C++} targets the ESP32 firmware: direct register and peripheral access, deterministic sampling intervals, mature motor-control patterns, and small binary size~\cite{espressif2023esp32}.
+
+\textbf{Python~3} targets the Raspberry Pi intelligence layer: the official Google Generative AI client (\texttt{google.generativeai}), \texttt{pyserial} for UART, rapid iteration on prompts and validation rules, and structured logging~\cite{vemprala2024chatgpt}.
+
+\textbf{JSON line protocol} over UART at 115,200 baud provides human-readable debugging, explicit message boundaries (newline-terminated lines), and straightforward parsing on both ends without custom framing beyond newline delimiters.
+
+%-------------------------------------------------------------------
+\subsection{Future Extensions}
+\label{subsec:future}
+
+Planned extensions beyond the current baseline include multimodal prompts (vision and speech), longer-horizon planning~\cite{wake2023gptrobot}, on-device buffering of telemetry for offline analysis, and optional local-model experiments---without removing the validation layer before actuation~\cite{huang2023grounded}.
+
+%-------------------------------------------------------------------
+\section{System Architecture}
+\label{sec:sysarch}
+
+KANDA is structured as a \textbf{three-tier logical architecture}: intelligence on the Raspberry Pi, a duplex UART link, and embodiment on the ESP32 interfacing to sensors, drivers, and display. Figure~\ref{fig:sysarch} summarises the layering.
+
+\begin{figure}[htbp!]
+\centering
+\resizebox{0.92\textwidth}{!}{%
+\begin{tikzpicture}[
+  layer/.style={draw, thick, rounded corners=4pt, minimum width=11.8cm, minimum height=1.35cm, align=center, font=\small},
+  halfbox/.style={draw, thick, rounded corners=4pt, minimum width=5.6cm, minimum height=1.05cm, align=center, font=\footnotesize},
+  arr/.style={-{Stealth[length=2.5mm]}, thick},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=2pt},
+  node distance=0.65cm
+]
+
+% Layer 1: Intelligence
+\node[layer, fill=blue!8] (intel) {
+  \textbf{Intelligence layer (Raspberry Pi)}\\[3pt]
+  {\footnotesize Prompt builder \quad$\bullet$\quad Gemini client \quad$\bullet$\quad Safety validator \quad$\bullet$\quad UART bridge}
+};
+
+% UART link (narrow band)
+\node[layer, fill=yellow!15, minimum height=0.85cm, font=\footnotesize] (uart) [below=of intel] {
+  \textbf{UART serial}\quad 115,200 baud\quad newline-delimited JSON \& telemetry
+};
+
+% Embodiment: two halves
+\node[halfbox, fill=orange!10, below left=0.65cm and 0.25cm of uart] (embL) {
+  \textbf{Control \& parsing}\\[2pt]
+  {\scriptsize JSON $\rightarrow$ PWM \& direction}
+};
+\node[halfbox, fill=orange!10, below right=0.65cm and 0.25cm of uart] (embR) {
+  \textbf{Sensing \& display}\\[2pt]
+  {\scriptsize HC-SR04 \quad OLED status}
+};
+
+\node[layer, fill=orange!6, minimum width=11.8cm, minimum height=0.95cm, font=\footnotesize] (embbar) at ($(embL.south)!0.5!(embR.south) + (0,-0.65)$) {
+  \textbf{Embodiment layer (ESP32)} --- dual-mode: AI\_MODE when valid JSON arrives; AUTO\_MODE after watchdog timeout
+};
+
+% Physical
+\node[layer, fill=gray!12, below=0.55cm of embbar] (phys) {
+  \textbf{Physical plant}\\[2pt]
+  {\footnotesize HC-SR04 sensors \quad$\bullet$\quad TB6612FNG \quad$\bullet$\quad DC motors \quad$\bullet$\quad power \& mechanics}
+};
+
+\draw[arr] (intel) -- node[lbl, right] {Validated JSON downlink} (uart);
+\draw[arr] (uart) -- node[lbl, left, pos=0.45] {Telemetry uplink} (intel);
+
+\draw[arr] (uart.south) -- ++(0,-0.12) -| (embL.north);
+\draw[arr] (uart.south) -- ++(0,-0.12) -| (embR.north);
+
+\draw[arr] (embL.south) -- ++(0,-0.08) -| (embbar.155);
+\draw[arr] (embR.south) -- ++(0,-0.08) -| (embbar.25);
+
+\draw[arr] (embbar) -- node[lbl, right] {PWM \& sensing} (phys);
+
+\end{tikzpicture}%
+}% end resizebox
+\caption{High-level layered architecture of KANDA}
+\label{fig:sysarch}
+\end{figure}
+
+Fig.~\ref{fig:sysarch} shows how responsibilities are split. The \textit{intelligence layer} performs hardware-aware prompting, calls the Gemini API (default Gemini~2.5 Flash), validates JSON commands, and transmits safe motor intents over UART. The \textit{UART link} carries newline-terminated ASCII lines in both directions. The \textit{embodiment layer} parses commands, drives motors, samples ultrasonic sensors, refreshes the OLED, and enforces mode logic including fallback to AUTO\_MODE. The \textit{physical plant} captures sensors, actuators, and power paths documented in hardware chapters.
+
+%-------------------------------------------------------------------
+\section{Data Flow Diagrams}
+\label{sec:dfd}
+
+%-------------------------------------------------------------------
+\subsection{Data Flow Diagram Level~0, Overall System}
+\label{subsec:dfd0}
+
+The Level~0 DFD places KANDA at the centre of supervision, cloud inference, and the physical deployment environment.
+
+\begin{figure}[htbp!]
+\centering
+\resizebox{0.88\textwidth}{!}{%
+\begin{tikzpicture}[
+  entity/.style={draw, thick, rectangle, rounded corners=3pt, minimum width=3.2cm, minimum height=1cm, align=center, font=\small},
+  process/.style={draw, thick, circle, minimum size=2.9cm, align=center, font=\small},
+  arr/.style={-{Stealth[length=2.5mm]}, thick},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=2pt},
+  node distance=1.4cm
+]
+
+\node[entity, fill=blue!10] (op) {\textbf{Operator}\\{\footnotesize (supervision)}};
+
+\node[process, fill=green!12, below=2cm of op] (sys) {\textbf{KANDA}\\{\footnotesize embodied agent}};
+
+\node[entity, fill=purple!10, below left=1.9cm and 2.5cm of sys] (gem) {\textbf{Gemini API}\\{\footnotesize (HTTPS)}};
+
+\node[entity, fill=gray!15, below right=1.9cm and 2.5cm of sys] (env) {\textbf{Environment}\\{\footnotesize (workspace)}};
+
+\draw[arr] (op) -- node[lbl, left] {start/stop, config} (sys);
+\draw[arr] (sys) -- node[lbl, right] {status, logs} (op);
+
+\draw[arr] ([xshift=-0.35cm]sys.west) -- node[lbl, above, sloped] {prompt / completion} ([yshift=0.12cm]gem.east);
+\draw[arr] ([yshift=-0.12cm]gem.east) -- node[lbl, below, sloped] {JSON text} ([xshift=-0.35cm]sys.west);
+
+\draw[arr] ([xshift=0.35cm]sys.east) -- node[lbl, above, sloped] {motion} ([yshift=0.12cm]env.west);
+\draw[arr] ([yshift=-0.12cm]env.west) -- node[lbl, below, sloped] {layout / obstacles} ([xshift=0.35cm]sys.east);
+
+\end{tikzpicture}%
+}% end resizebox
+\caption{Data flow diagram Level~0, overall system}
+\label{fig:dfd0}
+\end{figure}
+
+Fig.~\ref{fig:dfd0} abstracts KANDA as a single process. The \textit{operator} starts or stops runs and may adjust configuration while receiving status and logs. The system exchanges HTTPS messages with the \textit{Gemini API}: prompts ascend and structured completions descend. Interaction with the \textit{environment} captures that motion changes the scene layout---including obstacle distances reflected indirectly through onboard sensing inside the system boundary.
+
+%-------------------------------------------------------------------
+\subsection{Data Flow Diagram Level~1, Embodiment and Intelligence}
+\label{subsec:dfd1}
+
+The Level~1 DFD decomposes KANDA into two cooperating sub-systems linked by the UART channel.
+
+\begin{figure}[htbp!]
+\centering
+\resizebox{0.94\textwidth}{!}{%
+\begin{tikzpicture}[
+  entity/.style={draw, thick, rectangle, rounded corners=3pt, minimum width=3cm, minimum height=0.75cm, align=center, font=\small, fill=purple!10},
+  process/.style={draw, thick, rectangle, rounded corners=6pt, minimum width=5.4cm, minimum height=0.52cm, align=center, font=\small},
+  chan/.style={draw, thick, rectangle, rounded corners=2pt, minimum width=2.2cm, minimum height=4.6cm, align=center, font=\footnotesize, fill=yellow!14},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=2pt},
+  node distance=0.32cm
+]
+
+\node[entity] (gem) {\textbf{Gemini API}};
+
+% UART channel (centre spine)
+\node[chan, below=1cm of gem] (uart) {\textbf{UART}\\[4pt]{\scriptsize duplex}};
+
+% LEFT: Embodiment column (ESP32)
+\node[process, fill=orange!14, font=\small\bfseries, left=2.15cm of uart, anchor=east, minimum width=5.5cm] (e0) {Embodiment (ESP32)};
+\node[process, fill=orange!6, below=0.2cm of e0, font=\scriptsize, minimum width=5.5cm] (e1) {1.1 Sample ultrasonic ranges};
+\node[process, fill=orange!6, below=0.12cm of e1, font=\scriptsize, minimum width=5.5cm] (e2) {1.2 Format telemetry line};
+\node[process, fill=orange!6, below=0.12cm of e2, font=\scriptsize, minimum width=5.5cm] (e3) {1.3 Parse JSON command};
+\node[process, fill=orange!6, below=0.12cm of e3, font=\scriptsize, minimum width=5.5cm] (e4) {1.4 PWM, direction, OLED};
+
+% RIGHT: Intelligence column (Pi)
+\node[process, fill=blue!12, font=\small\bfseries, right=2.15cm of uart, anchor=west, minimum width=5.5cm] (i0) {Intelligence (Raspberry Pi)};
+\node[process, fill=blue!6, below=0.2cm of i0, font=\scriptsize, minimum width=5.5cm] (i1) {2.1 Read telemetry};
+\node[process, fill=blue!6, below=0.12cm of i1, font=\scriptsize, minimum width=5.5cm] (i2) {2.2 Build hardware-aware prompt};
+\node[process, fill=blue!6, below=0.12cm of i2, font=\scriptsize, minimum width=5.5cm] (i3) {2.3 Invoke Gemini};
+\node[process, fill=blue!6, below=0.12cm of i3, font=\scriptsize, minimum width=5.5cm] (i4) {2.4 Validate JSON command};
+\node[process, fill=blue!6, below=0.12cm of i4, font=\scriptsize, minimum width=5.5cm] (i5) {2.5 Transmit validated command};
+
+% Gemini to intelligence (HTTPS inference)
+\draw[arr] (gem.south) -- +(0,-0.35) -| node[lbl, pos=0.28, above] {HTTPS} (i3.north);
+
+% Telemetry uplink: embodiment -> uart -> intelligence
+\draw[arr] (e2.east) -- node[lbl, above, pos=0.4] {telemetry} (uart.west);
+
+\draw[arr] (uart.east) -- node[lbl, above, pos=0.4] {telemetry} (i1.west);
+
+% Command downlink: intelligence -> uart -> embodiment
+\draw[arr] (i5.west) -- node[lbl, below, pos=0.4] {JSON} (uart.east);
+
+\draw[arr] (uart.west) -- node[lbl, below, pos=0.4] {JSON} (e3.east);
+
+\end{tikzpicture}%
+}% end resizebox
+\caption{Data flow diagram Level~1, embodiment and intelligence sub-systems}
+\label{fig:dfd1}
+\end{figure}
+
+Fig.~\ref{fig:dfd1} separates real-time embodiment (left) from asynchronous intelligence (right). Telemetry formatted on the ESP32 flows upward to the Raspberry Pi; validated JSON commands flow downward after prompt construction, Gemini inference, and validation. HTTPS exchanges with the Gemini API attach to the intelligence column (expanded at Level~2).
+
+%-------------------------------------------------------------------
+\subsection{Data Flow Diagram Level~2, Intelligence Pipeline}
+\label{subsec:dfd2_intel}
+
+\begin{figure}[htbp!]
+\centering
+\resizebox{0.82\textwidth}{!}{%
+\begin{tikzpicture}[
+  proc/.style={draw, thick, rectangle, rounded corners=4pt, minimum width=8.8cm, minimum height=0.78cm, align=center, font=\footnotesize, fill=blue!8},
+  ext/.style={draw, thick, rectangle, rounded corners=3pt, minimum width=3.4cm, minimum height=0.55cm, align=center, font=\footnotesize, fill=purple!10},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=1pt},
+  node distance=0.38cm
+]
+
+\node[ext] (uartin) {\textbf{UART} {\scriptsize (telemetry in)}};
+
+\node[proc, below=of uartin] (p1) {\textbf{2.1 Read telemetry} --- parse distances and state from ASCII line};
+
+\node[proc, below=of p1] (p2) {\textbf{2.2 Build prompt} --- inject ranges, legal actions, speed bounds, rules};
+
+\node[proc, below=of p2] (p3) {\textbf{2.3 Invoke Gemini} --- low temperature, bounded output tokens};
+
+\node[ext, below=of p3] (gem) {\textbf{Gemini API}};
+
+\node[proc, below=of gem] (p4) {\textbf{2.4 Validate} --- schema, whitelist, clamp speed, safe stop on fault};
+
+\node[ext, below=of p4] (uartout) {\textbf{UART} {\scriptsize (JSON command out)}};
+
+\draw[arr] (uartin) -- node[lbl, right] {line} (p1);
+\draw[arr] (p1) -- node[lbl, right] {structs} (p2);
+\draw[arr] (p2) -- node[lbl, right] {prompt} (p3);
+\draw[arr] (p3) -- node[lbl, right] {HTTPS} (gem);
+\draw[arr] (gem) -- node[lbl, right] {raw JSON} (p4);
+\draw[arr] (p4) -- node[lbl, right] {safe command} (uartout);
+
+\end{tikzpicture}%
+}% end resizebox
+\caption{Data flow diagram Level~2, intelligence pipeline on the Raspberry Pi}
+\label{fig:dfd2a}
+\end{figure}
+
+Fig.~\ref{fig:dfd2a} details the Pi-side pipeline implemented by \path|main.py| and companion modules: telemetry ingestion, hardware-aware prompt construction, Gemini invocation (default model \texttt{gemini-2.5-flash}), validation, and transmission of a single safe JSON line per cycle.
+
+%-------------------------------------------------------------------
+\subsection{Data Flow Diagram Level~2, Embodiment Pipeline}
+\label{subsec:dfd2_emb}
+
+\begin{figure}[htbp!]
+\centering
+\resizebox{0.82\textwidth}{!}{%
+\begin{tikzpicture}[
+  proc/.style={draw, thick, rectangle, rounded corners=4pt, minimum width=8.8cm, minimum height=0.78cm, align=center, font=\footnotesize, fill=orange!8},
+  ext/.style={draw, thick, rectangle, rounded corners=3pt, minimum width=3.4cm, minimum height=0.55cm, align=center, font=\footnotesize, fill=gray!14},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=1pt},
+  node distance=0.38cm
+]
+
+\node[ext] (sns) {\textbf{Sensors} {\scriptsize (HC-SR04)}};
+
+\node[proc, below=of sns] (p1) {\textbf{1.1 Trigger \& capture echoes} --- compute distances (cm)};
+
+\node[proc, below=of p1] (p2) {\textbf{1.2 Compose telemetry} --- ASCII line to companion};
+
+\node[ext, below=of p2] (uartup) {\textbf{UART TX} {\scriptsize (to Pi)}};
+
+\node[ext, below=0.45cm of uartup] (uartdn) {\textbf{UART RX} {\scriptsize (from Pi)}};
+
+\node[proc, below=of uartdn] (p3) {\textbf{1.3 Parse JSON command} --- ArduinoJson / line parser};
+
+\node[proc, below=of p3] (p4) {\textbf{1.4 Map action to motor primitives} --- PWM + direction pins};
+
+\node[ext, below=of p4] (mot) {\textbf{Motors \& OLED}};
+
+\draw[arr] (sns) -- node[lbl, right] {echo timing} (p1);
+\draw[arr] (p1) -- node[lbl, right] {ranges} (p2);
+\draw[arr] (p2) -- node[lbl, right] {telemetry} (uartup);
+
+\draw[arr] (uartdn) -- node[lbl, right] {JSON line} (p3);
+\draw[arr] (p3) -- node[lbl, right] {intent} (p4);
+\draw[arr] (p4) -- node[lbl, right] {drive / text} (mot);
+
+\end{tikzpicture}%
+}% end resizebox
+\caption{Data flow diagram Level~2, embodiment pipeline on the ESP32}
+\label{fig:dfd2b}
+\end{figure}
+
+Fig.~\ref{fig:dfd2b} expands embodiment-side processing: ranging, telemetry uplink, inbound JSON parsing, mapping discrete actions to TB6612FNG outputs, and operator-visible OLED updates. Watchdog and AUTO\_MODE transitions are policy logic around these flows.
+
+%-------------------------------------------------------------------
+\section{Summary}
+\label{sec:ch4summary}
+
+This chapter presented the high-level design of KANDA. Design considerations emphasised validation before actuation~\cite{huang2023grounded}, affordance-grounded command formats~\cite{ahn2022saycan}, layered embodied structure~\cite{brooks1986robust}, and resilience to stochastic cloud latency~\cite{vemprala2024chatgpt}. Development followed phased delivery from embodiment to intelligence, with a documented path toward multimodal extensions~\cite{zeng2023socratic,wu2023tidybot}.
+
+Architectural strategies justified C++ on the ESP32 and Python on the Raspberry Pi, linked by a newline-delimited JSON and telemetry UART protocol~\cite{espressif2023esp32}. Figure~\ref{fig:sysarch} summarised the intelligence, UART, embodiment, and physical tiers. Data flow diagrams at Level~0 (\ref{fig:dfd0}), Level~1 (\ref{fig:dfd1}), and Level~2 (\ref{fig:dfd2a}, \ref{fig:dfd2b}) traced information from sensors and cloud inference to motor outputs. Chapter~5 refines these sub-systems into detailed module-level design aligned with the implementation directories.

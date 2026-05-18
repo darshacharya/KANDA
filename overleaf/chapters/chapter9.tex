@@ -1,0 +1,48 @@
+% ================================================================
+%  Chapter 9 — Conclusion (KANDA)
+%  Knowledge-driven Autonomous Navigation and Decision-making Agent
+% ================================================================
+\chapter{Conclusion}
+\label{ch:conclusion}
+
+This closing chapter consolidates the report. Chapter~\ref{ch:results} already stated technical conclusions, limitations, and directions for Phase~4. Here, each project objective from Chapter~\ref{ch:intro} is mapped to the artefacts and chapters that realise it, followed by brief reflections on the engineering process.
+
+%-------------------------------------------------------------------
+\section{Fulfilment of Objectives}
+\label{sec:objective_fulfilment}
+
+Table~\ref{tab:objectives_map} links the six objectives enumerated in Section~\ref{sec:objectives} to the requirements, design, implementation, and testing material in this document.
+
+\begin{table}[H]
+\centering
+\caption{Mapping of project objectives to report evidence}
+\label{tab:objectives_map}
+\begin{tabularx}{\textwidth}{@{}cX>{\raggedright\arraybackslash}p{3.6cm}@{}}
+\toprule
+\textbf{\#} & \textbf{Objective (summary)} & \textbf{Primary evidence} \\
+\midrule
+1 & Dual-processor architecture; JSON over UART & Ch.~\ref{ch:srs}, \ref{ch:hld}, \ref{ch:detail}, \ref{ch:impl}; IT-01, IT-02 \\
+2 & Hardware-aware context builder & Ch.~\ref{ch:detail} (\texttt{context\_builder}); Ch.~\ref{ch:impl} \\
+3 & Safety validation before actuation & Ch.~\ref{ch:detail}, \ref{ch:impl}; UT-01; FR-06/07 \\
+4 & Dual-mode firmware (AI\_MODE / AUTO\_MODE) & Ch.~\ref{ch:detail}, \ref{ch:impl}; ST-01, ST-02 \\
+5 & Physical demonstration on commodity hardware & Ch.~\ref{ch:impl}, \ref{ch:results}; setup in Ch.~\ref{ch:testing} \\
+6 & Evaluation scenarios and failure recovery & Ch.~\ref{ch:testing} (ST-01--ST-03); Ch.~\ref{ch:results} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Taken together, the SRS, layered design, module descriptions, implementation narrative, test traceability, and demonstration discussion show that all six objectives were addressed in the scope defined in Chapter~\ref{ch:intro}: indoor differential drive, Gemini on the Pi, validator-enforced commands, and UART-based coupling without claiming outdoor SLAM or on-device foundation models.
+
+%-------------------------------------------------------------------
+\section{Reflections}
+\label{sec:reflections}
+
+Three lessons stood out during integration. First, \textbf{contract discipline} on the serial line (one JSON object per line, fixed telemetry pattern) saved debugging time compared to ad-hoc byte streams. Second, \textbf{separating rates}---fast local sensing versus slow cloud reasoning---avoided false expectations about real-time LLM latency~\cite{vemprala2024chatgpt}. Third, \textbf{validation as a product feature}, not an afterthought, made it safe to iterate on prompts without risking arbitrary motor verbs~\cite{huang2023grounded}.
+
+%-------------------------------------------------------------------
+\section{Closing Remarks}
+\label{sec:ch9closing}
+
+KANDA shows that a small, low-cost mobile platform can host a credible sense--reason--validate--act loop when LLM outputs are constrained and firmware retains autonomous competence. The work is a stepping stone toward richer perception and planning (Phase~4), not an endpoint. Readers pursuing similar projects should budget time for serial reliability, level shifting, and documented safe-stop behaviour before expanding model capability.
+
+This report therefore ends with the objectives mapped to evidence, the main technical findings in Chapter~\ref{ch:results}, and the bibliography that grounds the work in embodied AI and robotics practice.
