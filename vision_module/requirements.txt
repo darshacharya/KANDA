@@ -1,0 +1,6 @@
+google-genai
+picamera2
+Pillow
+pyaudio
+pyserial
+pvporcupine
