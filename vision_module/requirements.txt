@@ -3,4 +3,5 @@ picamera2
 Pillow
 pyaudio
 pyserial
-pvporcupine
+openwakeword
+numpy

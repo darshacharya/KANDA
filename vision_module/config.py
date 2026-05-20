@@ -41,12 +41,14 @@ CAMERA_MIN_JPEG_BYTES = 5_000   # frames smaller than this are corrupt
 VLM_INTERVAL_SEC = float(os.getenv("KANDA_VLM_INTERVAL", "10.0"))
 
 
-# ── Wake Word (Porcupine) ─────────────────────────────────────────────────────
-# Free access key from: https://console.picovoice.ai/
-WAKE_WORD_KEY         = os.getenv("PORCUPINE_ACCESS_KEY", "")
-WAKE_WORD_SENSITIVITY = float(os.getenv("KANDA_WAKE_SENSITIVITY", "0.4"))
-# Set to False to use keyboard fallback (Enter key) instead of Porcupine
-WAKE_WORD_ENABLED = os.getenv("KANDA_WAKE_WORD", "1") == "1"
+# ── Wake Word (openWakeWord — no account or API key needed) ───────────────────
+# Built-in models: "hey_jarvis", "alexa", "hey_mycroft"
+# Custom model:    path to a .onnx file (e.g. "hey_kanda.onnx")
+# Default "hey_jarvis" works out of the box — just say "Hey Jarvis"
+WAKE_WORD_MODEL     = os.getenv("KANDA_WAKE_WORD_MODEL", "hey_jarvis")
+WAKE_WORD_SENSITIVITY = float(os.getenv("KANDA_WAKE_SENSITIVITY", "0.5"))
+# Set to 0 to use keyboard fallback (press Enter) instead of mic wake word
+WAKE_WORD_ENABLED   = os.getenv("KANDA_WAKE_WORD", "1") == "1"
 
 
 # ── Microphone / VAD ─────────────────────────────────────────────────────────

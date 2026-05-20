@@ -1,24 +1,31 @@
 """
 KANDA Vision Module — Wake Word Detector
-Listens continuously for "Hey Kanda" using Porcupine (offline, ~5% CPU on Pi 4).
-When detected, sets a threading.Event so the main loop can transition to LISTENING.
+Uses openWakeWord — fully open source, no account, no API key required.
 
-Fallback mode (KANDA_WAKE_WORD=0): pressing Enter triggers the wake event instead
-of Porcupine — useful for testing without a Picovoice access key.
+Wake phrase options (set KANDA_WAKE_WORD_MODEL in env):
+  "hey_jarvis"    — say "Hey Jarvis"   (default, works out of the box)
+  "alexa"         — say "Alexa"
+  "hey_mycroft"   — say "Hey Mycroft"
+  custom          — record ~5 clips and train (see below)
+
+Fallback (KANDA_WAKE_WORD=0): press Enter in terminal — no setup needed.
 
 Setup:
-    pip install pvporcupine
-    Get free access key at: https://console.picovoice.ai/
-    export PORCUPINE_ACCESS_KEY=your_key
+    pip install openwakeword pyaudio
+
+Train a custom "Hey Kanda" model (optional, ~10 min):
+    pip install openwakeword[train]
+    oww-train --phrase "hey kanda" --output hey_kanda.onnx
+    export KANDA_WAKE_WORD_MODEL=hey_kanda.onnx
 
 Test standalone:
-    export PORCUPINE_ACCESS_KEY=your_key
     python3 wake_word.py
 """
 
 import logging
 import struct
 import threading
+import numpy as np
 from typing import Optional
 
 import config
@@ -26,28 +33,32 @@ import config
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+# openWakeWord needs 16kHz mono, 80ms chunks (1280 samples)
+OWW_SAMPLE_RATE  = 16000
+OWW_CHUNK_FRAMES = 1280
+
 
 class WakeWordDetector:
     """
-    Runs Porcupine in a background thread.
-    Fires wake_event whenever "Hey Kanda" (or fallback Enter key) is heard.
-    State machine checks wake_event.is_set() and calls clear() after consuming it.
+    Listens continuously for a wake word using openWakeWord (offline, ~8% CPU on Pi 4).
+    Fires wake_event when wake word is heard.
+    Falls back to keyboard Enter if openWakeWord is not available or disabled.
     """
 
     def __init__(self, wake_event: threading.Event):
         self._wake_event = wake_event
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
-        self._use_porcupine = config.WAKE_WORD_ENABLED and bool(config.WAKE_WORD_KEY)
+        self._use_oww = config.WAKE_WORD_ENABLED
 
     def start(self) -> None:
-        if self._use_porcupine:
+        if self._use_oww:
             self._thread = threading.Thread(
-                target=self._porcupine_loop,
+                target=self._oww_loop,
                 name="wake-word",
                 daemon=True,
             )
-            logger.info("Wake word: Porcupine active (sensitivity=%.1f)", config.WAKE_WORD_SENSITIVITY)
+            logger.info("Wake word: openWakeWord active (model=%s)", config.WAKE_WORD_MODEL)
         else:
             self._thread = threading.Thread(
                 target=self._keyboard_fallback_loop,
@@ -63,77 +74,90 @@ class WakeWordDetector:
         if self._thread:
             self._thread.join(timeout=3)
 
-    # ── Porcupine listener ─────────────────────────────────────────────────────
+    # ── openWakeWord listener ─────────────────────────────────────────────────
 
-    def _porcupine_loop(self) -> None:
+    def _oww_loop(self) -> None:
         try:
-            import pvporcupine
+            from openwakeword.model import Model
             import pyaudio
         except ImportError as e:
-            logger.error("Missing library: %s — falling back to keyboard", e)
+            logger.error("openWakeWord not installed: %s", e)
+            logger.error("Run: pip install openwakeword pyaudio")
+            logger.info("Falling back to keyboard mode")
             self._keyboard_fallback_loop()
             return
 
-        porcupine = None
-        audio_stream = None
-        pa = None
+        pa            = None
+        audio_stream  = None
+        oww_model     = None
 
         try:
-            # NOTE: "hey siri" is the closest built-in Porcupine keyword.
-            # To use a custom "Hey Kanda" keyword:
-            #   1. Train one free at https://console.picovoice.ai/ppn
-            #   2. Download the .ppn file for Raspberry Pi
-            #   3. Replace keywords= with:
-            #        keyword_paths=["hey-kanda_raspberry-pi.ppn"]
-            #      and remove the keywords= line.
-            print("[Wake Word] NOTICE: using 'Hey Siri' as wake phrase "
-                  "(train 'Hey Kanda' at console.picovoice.ai for custom wake word)")
-            porcupine = pvporcupine.create(
-                access_key=config.WAKE_WORD_KEY,
-                keywords=["hey siri"],
-                sensitivities=[config.WAKE_WORD_SENSITIVITY],
-            )
+            # Load model — built-in or custom .onnx file
+            model_path = config.WAKE_WORD_MODEL
+            if model_path.endswith(".onnx"):
+                # Custom trained model
+                oww_model = Model(wakeword_models=[model_path], inference_framework="onnx")
+                wake_label = model_path.split("/")[-1].replace(".onnx", "")
+            else:
+                # Built-in model: "hey_jarvis", "alexa", "hey_mycroft"
+                oww_model = Model(wakeword_models=[model_path], inference_framework="onnx")
+                wake_label = model_path
+
+            logger.info("openWakeWord loaded: '%s' — say the wake phrase to activate",
+                        wake_label.replace("_", " ").title())
+            print(f"\n[Wake Word] Say \"{wake_label.replace('_', ' ').title()}\" to wake KANDA\n")
 
             pa = pyaudio.PyAudio()
             audio_stream = pa.open(
-                rate=porcupine.sample_rate,
+                rate=OWW_SAMPLE_RATE,
                 channels=1,
                 format=pyaudio.paInt16,
                 input=True,
-                frames_per_buffer=porcupine.frame_length,
+                frames_per_buffer=OWW_CHUNK_FRAMES,
             )
 
-            logger.info("Porcupine listening on mic (frame_len=%d)", porcupine.frame_length)
-
             while not self._stop_event.is_set():
-                pcm = audio_stream.read(porcupine.frame_length, exception_on_overflow=False)
-                pcm = struct.unpack_from("h" * porcupine.frame_length, pcm)
+                raw = audio_stream.read(OWW_CHUNK_FRAMES, exception_on_overflow=False)
+                # openWakeWord expects numpy int16 array
+                pcm = np.frombuffer(raw, dtype=np.int16)
 
-                keyword_index = porcupine.process(pcm)
-                if keyword_index >= 0:
-                    logger.info("Wake word detected!")
-                    self._wake_event.set()
+                predictions = oww_model.predict(pcm)
+
+                # predictions is a dict: {model_name: score (0.0–1.0)}
+                for name, score in predictions.items():
+                    if score >= config.WAKE_WORD_SENSITIVITY:
+                        logger.info("Wake word detected! model=%s score=%.2f", name, score)
+                        self._wake_event.set()
+                        # Brief cooldown — ignore further triggers for 2s
+                        self._stop_event.wait(timeout=2.0)
+                        if not self._stop_event.is_set():
+                            oww_model.reset()   # clear internal state
+                        break
 
         except Exception as exc:
-            logger.error("Porcupine error: %s — falling back to keyboard", exc)
+            logger.error("openWakeWord error: %s — falling back to keyboard", exc)
             self._keyboard_fallback_loop()
         finally:
             if audio_stream:
-                audio_stream.stop_stream()
-                audio_stream.close()
+                try:
+                    audio_stream.stop_stream()
+                    audio_stream.close()
+                except Exception:
+                    pass
             if pa:
-                pa.terminate()
-            if porcupine:
-                porcupine.delete()
+                try:
+                    pa.terminate()
+                except Exception:
+                    pass
 
-    # ── Keyboard fallback ──────────────────────────────────────────────────────
+    # ── Keyboard fallback ─────────────────────────────────────────────────────
 
     def _keyboard_fallback_loop(self) -> None:
-        """Press Enter in terminal to simulate wake word. Useful for testing."""
-        print("\n[Wake Word] Keyboard fallback active — press Enter to wake KANDA\n")
+        """Press Enter in terminal to simulate wake word. No setup needed."""
+        print("\n[Wake Word] Keyboard mode — press Enter to wake KANDA\n")
         while not self._stop_event.is_set():
             try:
-                input()   # blocks until Enter
+                input()
                 if not self._stop_event.is_set():
                     logger.info("Wake word triggered (keyboard)")
                     self._wake_event.set()
@@ -151,12 +175,12 @@ if __name__ == "__main__":
     detector = WakeWordDetector(wake_event=event)
     detector.start()
 
-    print("Waiting for wake word (or Enter key)...")
-    for _ in range(60):
+    print("Waiting for wake word (or Enter key if openWakeWord not installed)...")
+    for _ in range(120):
         if event.wait(timeout=1.0):
             print("WAKE EVENT FIRED!")
             event.clear()
-            print("Cleared. Waiting again...")
+            print("Cleared. Listening again...")
 
     detector.stop()
     print("Done.")

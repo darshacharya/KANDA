@@ -68,14 +68,15 @@ A mobile robot where **Gemini is the brain and the ESP32 is the body**. You spea
 
 ## Quick Start
 
-### Step 1 — Get API keys (free)
+### Step 1 — Get API key (only one needed)
 
 | Key | Where |
 |-----|-------|
-| **Gemini** | [aistudio.google.com](https://aistudio.google.com) → Get API key |
-| **Porcupine** (optional) | [console.picovoice.ai](https://console.picovoice.ai) → free tier |
+| **Gemini** | [aistudio.google.com](https://aistudio.google.com) → Get API key — free |
 
-> **Without Porcupine:** press **Enter** in the terminal to wake KANDA (keyboard fallback). Everything else works identically.
+**Wake word uses openWakeWord — no account, no API key, fully offline.** Default wake phrase is **"Hey Jarvis"**. To use a different phrase, see the Wake Word section below.
+
+> **No mic?** Set `KANDA_WAKE_WORD=0` and press **Enter** in the terminal to wake KANDA.
 
 ---
 
@@ -211,16 +212,46 @@ KANDA_NO_UART=1 python3 main.py
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GEMINI_API_KEY` | — | **Required.** Google AI Studio key |
-| `PORCUPINE_ACCESS_KEY` | — | Optional. Wake word key. Keyboard fallback if missing |
 | `KANDA_NO_UART` | `0` | Set to `1` to run without ESP32 |
 | `KANDA_SERIAL_PORT` | `/dev/ttyUSB0` | ESP32 USB serial port |
 | `GEMINI_MODEL` | `gemini-2.5-flash-lite` | Gemini model to use |
 | `KANDA_WAKE_WORD` | `1` | Set to `0` to force keyboard fallback |
+| `KANDA_WAKE_WORD_MODEL` | `hey_jarvis` | Wake phrase model (`hey_jarvis`, `alexa`, `hey_mycroft`, or path to `.onnx`) |
+| `KANDA_WAKE_SENSITIVITY` | `0.5` | Wake word detection threshold (0.0–1.0) |
 | `KANDA_VLM_INTERVAL` | `10.0` | Seconds between background scene descriptions |
 | `KANDA_VAD_SILENCE` | `1.5` | Silence seconds before recording stops |
 | `KANDA_VAD_MAX` | `8.0` | Max recording length in seconds |
 | `KANDA_SEARCH_MAX_STEPS` | `20` | Max steps in a find-task search loop |
 | `KANDA_GEMINI_TIMEOUT` | `15` | Seconds before Gemini call is abandoned |
+
+---
+
+## Wake Word
+
+KANDA uses **openWakeWord** — fully open source, runs offline on Pi, no account needed.
+
+### Built-in wake phrases (work immediately, no training)
+
+| Say this | Set `KANDA_WAKE_WORD_MODEL` to |
+|----------|-------------------------------|
+| **"Hey Jarvis"** | `hey_jarvis` (default) |
+| **"Alexa"** | `alexa` |
+| **"Hey Mycroft"** | `hey_mycroft` |
+
+### Train a custom "Hey Kanda" model (~10 minutes, optional)
+
+```bash
+pip install openwakeword[train]
+oww-train --phrase "hey kanda" --output hey_kanda.onnx
+export KANDA_WAKE_WORD_MODEL=hey_kanda.onnx
+```
+
+### Keyboard fallback (no mic needed)
+
+```bash
+KANDA_WAKE_WORD=0 python3 main.py
+# Press Enter in terminal to wake KANDA
+```
 
 ---
 
