@@ -319,7 +319,7 @@ def main():
     print(f"  Model   : {config.GEMINI_MODEL}")
     print(f"  Camera  : {config.CAMERA_RESOLUTION[0]}x{config.CAMERA_RESOLUTION[1]}")
     print(f"  TTS     : {config.TTS_ENGINE}")
-    print(f"  Wake wd : {'Porcupine' if config.WAKE_WORD_ENABLED and config.WAKE_WORD_KEY else 'keyboard (Enter)'}")
+    print(f"  Wake wd : {'openWakeWord (' + config.WAKE_WORD_MODEL + ')' if config.WAKE_WORD_ENABLED else 'keyboard (Enter)'}")
     print(f"  ESP32   : {'disabled' if NO_UART else config.SERIAL_PORT}")
     print("=" * 52)
     print()
