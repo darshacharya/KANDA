@@ -105,7 +105,10 @@ def read_telemetry(serial_conn) -> Optional[dict]:
     if serial_conn is None:
         return None
     try:
+        # Only read if bytes are already waiting — never block with lock held
         with _serial_lock:
+            if serial_conn.in_waiting == 0:
+                return None
             raw = serial_conn.readline().decode("utf-8", errors="ignore").strip()
         if not raw or "->" not in raw:
             return None
@@ -135,20 +138,24 @@ def read_telemetry(serial_conn) -> Optional[dict]:
 
 def heartbeat_thread(serial_conn, body_ctx: BodyContext) -> None:
     """Read telemetry continuously, update body context, detect ESP32 silence."""
-    last_seen = time.time()
+    last_seen      = time.time()
+    last_warned_at = 0.0   # rate-limit the warning to once per 10s
+
     while not _shutdown_event.is_set():
         t = read_telemetry(serial_conn)
         if t:
             last_seen = time.time()
             body_ctx.update_sensors(t["front"], t["left"], t["right"])
-            # If ESP32 detected obstacle, cancel any running motion
             if t["action"] == "OBSTACLE":
                 logger.info("[heartbeat] ESP32 OBSTACLE — setting cancel")
                 _cancel_event.set()
         else:
             gap = time.time() - last_seen
             if gap > config.ESP32_HEARTBEAT_TIMEOUT_SEC:
-                logger.warning("[heartbeat] no ESP32 telemetry for %.0fs", gap)
+                now = time.time()
+                if now - last_warned_at >= 10.0:   # warn at most once every 10s
+                    logger.warning("[heartbeat] no ESP32 telemetry for %.0fs", gap)
+                    last_warned_at = now
         time.sleep(0.1)
 
 
