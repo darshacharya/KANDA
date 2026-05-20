@@ -108,12 +108,59 @@ This installs all system packages and Python dependencies automatically.
 
 ### Step 4 — Flash ESP32
 
-Open `firmware_phase4.ino` in Arduino IDE:
+**File to flash:** `vision_module/firmware_phase4.ino`
 
-1. Board: **ESP32 Dev Module**
-2. Upload speed: **115200**
-3. Flash the firmware
-4. Connect ESP32 to Pi via USB cable
+#### 4a — Install Arduino IDE
+
+Download from [arduino.cc/en/software](https://www.arduino.cc/en/software) (v2.x recommended).
+
+#### 4b — Add ESP32 board support
+
+1. Open Arduino IDE → **File → Preferences**
+2. Paste this URL into **"Additional boards manager URLs"**:
+   ```
+   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+   ```
+3. Click OK
+4. Go to **Tools → Board → Boards Manager**
+5. Search **esp32**, install **"esp32 by Espressif Systems"** (v2.x)
+
+#### 4c — Install required libraries
+
+Go to **Tools → Manage Libraries**, search and install each:
+
+| Library | Search term |
+|---------|-------------|
+| Adafruit GFX Library | `Adafruit GFX` |
+| Adafruit SSD1306 | `Adafruit SSD1306` |
+| ArduinoJson | `ArduinoJson` (by Benoit Blanchon) |
+
+#### 4d — Board settings
+
+Connect your ESP32 to your **Mac/PC** via USB, then set:
+
+| Setting | Value |
+|---------|-------|
+| **Board** | `ESP32 Dev Module` |
+| **Port** | the port that appears when ESP32 is plugged in (e.g. `/dev/cu.usbserial-0001` on Mac, `COM3` on Windows) |
+| **Upload Speed** | `115200` |
+| **Partition Scheme** | `Default 4MB with spiffs` |
+
+#### 4e — Open and upload
+
+1. Open `vision_module/firmware_phase4.ino` in Arduino IDE
+2. Click **Upload** (→ arrow button)
+3. Watch the console — you should see `Done uploading`
+4. Open **Serial Monitor** (baud: `115200`) — you should see:
+   ```
+   KANDA ready — waiting for Pi commands
+   F:30.5 L:21.8 R:16.4 -> STOP
+   F:30.5 L:21.8 R:16.4 -> STOP
+   ...
+   ```
+   > If you see sensor readings streaming — the firmware is working.
+
+5. Close Arduino IDE, then connect ESP32 to Pi via USB cable
 
 ---
 
