@@ -5,7 +5,7 @@
 \chapter{Implementation}
 \label{ch:impl}
 
-This chapter describes how \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)} was implemented on the dual-processor stack described in Chapters~\ref{ch:hld} and~\ref{ch:detail}: language and tool choices, repository layout, the UART and JSON protocols, firmware behaviour on the ESP32, the Python intelligence layer on the Raspberry Pi, representative code excerpts, and practical difficulties encountered during integration.
+This chapter walks through how we actually built KANDA: the programming languages we chose, where the code lives, how the two processors talk to each other, and the nitty-gritty details of the firmware and Python code. We also explain the real problems we hit during integration---the stuff that doesn't show up in papers but takes up half the development time. This is the chapter to read if you want to actually build a KANDA yourself.
 
 %-------------------------------------------------------------------
 \section{Languages, Tools, and Platforms}
@@ -17,19 +17,19 @@ Firmware targets the ESP32 using the \textbf{Arduino framework} with Espressif's
 
 \subsection{Intelligence layer}
 
-The companion computer runs \textbf{Linux} (Raspberry Pi OS or equivalent) with \textbf{Python~3.10+}. Dependencies are minimal by design: \texttt{google-generativeai} for Gemini access and \texttt{pyserial} for UART~\cite{vemprala2024chatgpt}. No separate web stack or database is required for the baseline closed-loop demo; configuration is read from environment variables and the central \texttt{config.py} module.
+The companion computer runs \textbf{Linux} (Raspberry Pi OS or equivalent) with \textbf{Python~3.10+}. Dependencies are minimal by design: \texttt{requests} for HTTP (Groq and NVIDIA NIM use OpenAI-compatible APIs), \texttt{pyserial} for UART, \texttt{openwakeword} for offline wake detection, and \texttt{picamera2} for camera access. No separate web stack or database is required for the baseline closed-loop demo; configuration is read from environment variables and the central \texttt{config.py} module.
 
 \begin{table}[H]
 \centering
 \caption{Implementation stack summary}
 \label{tab:impl_stack}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.8cm}X@{}}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}X@{}}
 \toprule
 \textbf{Artifact} & \textbf{Technology} \\
 \midrule
 MCU firmware & C++ (Arduino), ESP32, TB6612FNG, HC-SR04$\times$3, SSD1306 \\
-Pi runtime & Python~3, \texttt{venv} or system packages, process supervisor optional \\
-Cloud LLM & Google Gemini API (default \texttt{gemini-2.5-flash}) \\
+Pi runtime & Python~3.10+, \texttt{venv}, minimal dependencies \\
+Cloud LLM & Groq Llama 3.3 (text/ASR) + NVIDIA NIM Llama 3.2 Vision \\
 Serial link & UART 115200 baud, 8N1, newline-framed lines \\
 \bottomrule
 \end{tabularx}
@@ -42,12 +42,12 @@ Serial link & UART 115200 baud, 8N1, newline-framed lines \\
 The project groups firmware and intelligence code under a single repository root:
 
 \begin{itemize}[nosep]
-  \item \texttt{firmware/phase2\_obstacle\_avoidance/} --- single \texttt{.ino} sketch, obstacle logic, AI command executor, telemetry formatting.
-  \item \texttt{ai\_layer/} --- \texttt{main.py} (orchestrator), \texttt{config.py}, \texttt{uart\_bridge.py}, \texttt{context\_builder.py}, \texttt{llm\_client.py}, \texttt{safety\_validator.py}.
-  \item \texttt{docs/} --- pin and power notes for reproducible wiring.
+  \item \texttt{firmware/}: Arduino C++ sketch for ESP32 (obstacle avoidance, command execution, telemetry)
+  \item \texttt{vision\_module/}: \texttt{main.py} orchestrator, \texttt{config.py} settings, \texttt{task\_agent.py} reasoning and vision, \texttt{camera.py}, \texttt{vlm.py}, \texttt{voice\_command.py}, \texttt{wake\_word.py}, \texttt{telegram\_input.py}, \texttt{speaker.py}
+  \item \texttt{docs/}: pin and power notes for reproducible wiring
 \end{itemize}
 
-The intelligence layer follows a linear import graph: the orchestrator imports all other modules; \texttt{llm\_client} and \texttt{uart\_bridge} depend only on \texttt{config} and standard libraries, which keeps bring-up on a fresh Pi to installing two packages and exporting \texttt{GEMINI\_API\_KEY}.
+The intelligence layer follows a modular design: the orchestrator (\texttt{main.py}) imports task agents and I/O modules; \texttt{task\_agent} dispatches to Groq (text) or NVIDIA NIM (vision) as needed. Setup on a fresh Pi: install dependencies from \texttt{requirements.txt}, export \texttt{GROQ\_API\_KEY} and \texttt{NVIDIA\_API\_KEY}.
 
 %-------------------------------------------------------------------
 \section{Serial Protocol and Message Formats}
@@ -121,7 +121,127 @@ def validate(cmd: Any) -> dict:
 
 \subsection{Orchestrator loop}
 
-\texttt{main.py} opens the serial port, applies a short post-open delay for MCU reset, registers signal handlers that send \texttt{stop} on SIGINT/SIGTERM, and loops: read telemetry, short-circuit to stop if parse fails, build prompt, call Gemini inside try/except, validate, transmit, sleep for \texttt{LOOP\_INTERVAL\_SEC}. Exceptions per cycle trigger stop but keep the process alive for the next iteration.
+\texttt{main.py} opens the serial port, applies a short post-open delay for MCU reset, registers signal handlers that send \texttt{stop} on SIGINT/SIGTERM, and loops: read telemetry, short-circuit to stop if parse fails, dispatch to task agent, validate output, transmit, sleep for \texttt{LOOP\_INTERVAL\_SEC}. The task agent decides whether to call Groq (for text reasoning) or NVIDIA NIM (for vision). Exceptions per cycle trigger stop but keep the process alive for the next iteration.
+
+%-------------------------------------------------------------------
+\section{Phase~4 Implementation Details}
+\label{sec:phase4_impl}
+
+Phase~4 adds voice, vision, Telegram, and presentation capabilities. This section documents the key implementation patterns.
+
+\subsection{Control Cycle Sequence}
+
+Figure~\ref{fig:sequence} shows the timing of one voice-triggered control cycle.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  actor/.style={font=\footnotesize\bfseries, minimum height=0.6cm},
+  msg/.style={-{Stealth[length=2mm]}, thick, font=\tiny},
+  note/.style={font=\tiny\itshape, text=gray!70!black},
+  node distance=0.4cm
+]
+% Actors
+\node[actor] (user) at (0,0) {User};
+\node[actor] (pi) at (3.5,0) {RPi4};
+\node[actor] (groq) at (7,0) {Groq / NVIDIA};
+\node[actor] (esp) at (10.5,0) {ESP32};
+
+% Lifelines
+\draw[thick] (user) -- (0,-7.5);
+\draw[thick] (pi) -- (3.5,-7.5);
+\draw[thick] (groq) -- (7,-7.5);
+\draw[thick] (esp) -- (10.5,-7.5);
+
+% Messages
+\draw[msg] (0,-0.8) -- node[above]{``go forward''} (3.5,-0.8);
+\draw[msg] (3.5,-1.4) -- node[above]{STT + classify} (7,-1.4);
+\draw[msg] (7,-2.0) -- node[above]{COMMAND: forward} (3.5,-2.0);
+\draw[msg] (3.5,-2.6) -- node[above]{validate()} (3.5,-2.8);
+\draw[msg] (3.5,-3.2) -- node[above]{\{"action":"forward","speed":120\}} (10.5,-3.2);
+\draw[msg] (10.5,-3.8) -- node[above]{F:45.2 L:30.1 R:28.5 -> FWD} (3.5,-3.8);
+\draw[msg] (3.5,-4.4) -- node[above]{body context + scene} (7,-4.4);
+\draw[msg] (7,-5.0) -- node[above]{next action JSON} (3.5,-5.0);
+\draw[msg] (3.5,-5.6) -- node[above]{validated cmd} (10.5,-5.6);
+\draw[msg] (10.5,-6.2) -- node[above]{telemetry} (3.5,-6.2);
+
+% Time annotations
+\node[note] at (5.25,-1.1) {1.5--2.5\,s};
+\node[note] at (7,-3.5) {$<$5\,ms};
+\node[note] at (5.25,-4.7) {1.5--3.5\,s};
+\end{tikzpicture}
+\caption{Sequence diagram of a voice-triggered control cycle showing timing for STT, intent classification, validation, and command execution.}
+\label{fig:sequence}
+\end{figure}
+
+\subsection{Body-Context Assembly}
+
+Figure~\ref{fig:bodyctx_ch6} shows how the body-context block is assembled from multiple sources before each Groq or NVIDIA NIM call.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  src/.style={draw, thick, rounded corners=3pt, minimum height=0.7cm,
+              minimum width=2.2cm, align=center, font=\footnotesize},
+  target/.style={draw, thick, rounded corners=3pt, minimum height=1.6cm,
+                 minimum width=3.2cm, align=center, font=\footnotesize\bfseries},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+]
+\node[src, fill=orange!10] (sensors) at (0,2) {Sensor telemetry\\(F/L/R cm)};
+\node[src, fill=blue!10] (vlm) at (0,0.8) {VLM scene\\description};
+\node[src, fill=green!10] (history) at (0,-0.4) {Action history\\(last 5)};
+\node[src, fill=yellow!10] (caps) at (0,-1.6) {Capabilities +\\limitations};
+\node[src, fill=purple!8] (state) at (0,-2.8) {Current state +\\user instruction};
+
+\node[target, fill=gray!8] (ctx) at (5,0) {Body-Context\\Prompt\\(to Groq/NVIDIA)};
+
+\draw[arr] (sensors.east) -- (ctx.west |- sensors);
+\draw[arr] (vlm.east) -- (ctx.west |- vlm);
+\draw[arr] (history.east) -- (ctx.west |- history);
+\draw[arr] (caps.east) -- (ctx.west |- caps);
+\draw[arr] (state.east) -- (ctx.west |- state);
+\end{tikzpicture}
+\caption{Body-context assembly: five data sources are concatenated into a single prompt block for every Groq/NVIDIA call, grounding the models in the robot's physical reality.}
+\label{fig:bodyctx_ch6}
+\end{figure}
+
+\subsection{Telegram Interaction Flow}
+
+Figure~\ref{fig:telegram_flow} shows the three input paths through the Telegram bot.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  block/.style={draw, thick, rounded corners=3pt, minimum height=0.7cm,
+                minimum width=2cm, align=center, font=\footnotesize},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  node distance=0.5cm and 0.8cm
+]
+% Input types
+\node[block, fill=green!10] (text) {Text message};
+\node[block, fill=blue!10, below=of text] (voice) {Voice note};
+\node[block, fill=orange!10, below=of voice] (photo) {Photo};
+
+% Processing
+\node[block, fill=gray!8, right=1.5cm of text] (direct) {Queue as\\command};
+\node[block, fill=gray!8, right=1.5cm of voice] (transcribe) {Groq\\transcribe};
+\node[block, fill=gray!8, right=1.5cm of photo] (describe) {NVIDIA NIM\\describe object};
+
+% Converge
+\node[block, fill=yellow!12, right=1.5cm of transcribe] (intent) {Intent\\classification};
+\node[block, fill=orange!12, right=1.0cm of intent] (exec) {State machine\\execution};
+
+\draw[arr] (text) -- (direct);
+\draw[arr] (voice) -- (transcribe);
+\draw[arr] (photo) -- (describe);
+\draw[arr] (direct) -- (intent);
+\draw[arr] (transcribe) -- (intent);
+\draw[arr] (describe) -- node[below,font=\tiny]{``find <desc>''} (intent);
+\draw[arr] (intent) -- (exec);
+\end{tikzpicture}
+\caption{Telegram bot interaction flow: text commands pass directly; voice notes are transcribed by Groq; photos are described by NVIDIA NIM and converted to search commands. All paths converge at intent classification.}
+\label{fig:telegram_flow}
+\end{figure}
 
 %-------------------------------------------------------------------
 \section{Difficulties Encountered and Mitigations}
@@ -147,10 +267,10 @@ def validate(cmd: Any) -> dict:
 
 \textbf{Firmware:} Select the ESP32 board profile, set the correct USB port, compile, and upload \texttt{phase2\_obstacle\_avoidance.ino}. Confirm OLED initialisation and serial banner at 115200 baud.
 
-\textbf{Pi:} Install Python dependencies (\texttt{pip install google-generativeai pyserial}), export \texttt{GEMINI\_API\_KEY}, optionally \texttt{GEMINI\_MODEL} and \texttt{KANDA\_SERIAL\_PORT}, then run \texttt{python3 main.py} from \texttt{ai\_layer/}. Verify telemetry lines in the log before trusting motion.
+\textbf{Pi:} Install Python dependencies (\texttt{pip install -r requirements.txt}), export \texttt{GROQ\_API\_KEY} and \texttt{NVIDIA\_API\_KEY}, optionally \texttt{KANDA\_SERIAL\_PORT}, then run \texttt{python3 main.py} from \texttt{vision\_module/}. Verify telemetry lines in the log before trusting motion.
 
 %-------------------------------------------------------------------
 \section{Summary}
 \label{sec:ch6summary}
 
-This chapter recorded the concrete implementation of KANDA: Arduino C++ firmware with JSON actuation and dual-mode policy, Python modules for UART, hardware-aware prompting, Gemini inference, and mandatory validation, plus the newline-delimited serial contract linking the two runtimes. Configuration and failure handling prioritise safe stop behaviour over aggressive motion~\cite{vemprala2024chatgpt,huang2023grounded}. Standalone test blocks at the bottom of \texttt{safety\_validator.py} and \texttt{uart\_bridge.py}, plus serial console traces, served as informal regression checks during integration; Chapter~\ref{ch:testing} formalises the test strategy and requirement mapping.
+This chapter recorded the concrete implementation of KANDA: Arduino C++ firmware with JSON actuation and dual-mode policy, Python modules for UART, hardware-aware prompting, task agent dispatching to Groq (text) and NVIDIA NIM (vision), and mandatory validation, plus the newline-delimited serial contract linking the two runtimes. Configuration and failure handling prioritise safe stop behaviour over aggressive motion. Standalone test blocks at the bottom of utility modules, plus serial console traces, served as informal regression checks during integration; Chapter~\ref{ch:testing} formalises the test strategy and requirement mapping.

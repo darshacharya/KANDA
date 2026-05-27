@@ -5,13 +5,22 @@
 \chapter{Detailed Design}
 \label{ch:detail}
 
-This chapter presents the detailed design of \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)} at module and component level. It builds on the high-level architecture and data flows in Chapter~\ref{ch:hld}: overview diagrams, use cases, deployment components, a structure chart for the Python orchestrator, an activity view of one control cycle, and descriptions of each software module together with the embodiment firmware running on the ESP32.
+This chapter gets into the details of how KANDA actually works, piece by piece. We explain what each software module does, how they talk to each other, and what happens in a typical control cycle from sensor to motor. We also show what happens when things go wrong. This chapter is where the rubber meets the road---this is what we actually implemented and why each piece is necessary.
 
 %-------------------------------------------------------------------
 \section{High-Level Design Overview}
 \label{sec:hld_overview}
 
-The deployment comprises a Raspberry Pi running the Python package tree \texttt{ai\_layer/}, an ESP32 running Arduino-compatible firmware under \texttt{firmware/phase2\_obstacle\_avoidance/}, a duplex UART link, and HTTPS access to Google Gemini (default model \texttt{gemini-2.5-flash}). Figure~\ref{fig:hld_overview} summarises the principal deployable blocks.
+The deployment comprises a Raspberry Pi running the Python package tree \texttt{vision\_module/}, an ESP32 running Arduino-compatible firmware, a duplex UART link at 115,200 baud, and HTTPS access to two cloud services: Groq (text reasoning and ASR) and NVIDIA NIM (visual understanding). Figure~\ref{fig:hld_overview} summarises the principal deployable blocks.
+
+%--- IMAGE PLACEHOLDER: Replace TikZ diagram with deployment_architecture.png if available
+% To use image instead of TikZ:
+% \begin{figure}[H]
+% \centering
+% \includegraphics[width=0.9\textwidth]{deployment_architecture.png}
+% \caption{High-level deployable blocks of KANDA}
+% \label{fig:hld_overview}
+% \end{figure}
 
 \begin{figure}[htbp!]
 \centering
@@ -26,19 +35,19 @@ The deployment comprises a Raspberry Pi running the Python package tree \texttt{
 
 \node[block, fill=blue!10] (op) {\textbf{Operator}\\{\footnotesize supervision}};
 
-\node[block, fill=cyan!10, right=1.8cm of op] (pi) {\textbf{Raspberry Pi}\\{\footnotesize \texttt{ai\_layer/} (Python)}};
+\node[block, fill=cyan!10, right=1.8cm of op] (pi) {\textbf{Raspberry Pi}\\{\footnotesize \texttt{vision\_module/} (Python)}};
 
 \node[block, fill=orange!12, right=1.8cm of pi] (esp) {\textbf{ESP32}\\{\footnotesize firmware executor}};
 
-\node[block, fill=purple!10, below=1.45cm of pi] (gem) {\textbf{Gemini API}\\{\footnotesize HTTPS / JSON}};
+\node[block, fill=purple!10, below=1.45cm of pi] (gem) {\textbf{Groq + NVIDIA NIM}\\{\footnotesize Text \& Vision APIs}};
 
 \node[block, fill=gray!14, right=1.5cm of esp] (phys) {\textbf{Physical stack}\\{\footnotesize sensors, driver, motors, OLED}};
 
 \draw[arr] (op) -- node[lbl, above] {start/stop} (pi);
 \draw[arr] (pi) -- node[lbl, above] {UART JSON} (esp);
 \draw[arr] (esp) -- node[lbl, above] {mounting} (phys);
-\draw[arr] (pi.south) -- node[lbl, left] {inference} (gem.north);
-\draw[arr] (gem.north) -- node[lbl, right] {completion} (pi.south);
+\draw[arr] (pi.south) -- node[lbl, left] {reasoning} (gem.north);
+\draw[arr] (gem.north) -- node[lbl, right] {response} (pi.south);
 
 \end{tikzpicture}%
 }% end resizebox
@@ -46,7 +55,7 @@ The deployment comprises a Raspberry Pi running the Python package tree \texttt{
 \label{fig:hld_overview}
 \end{figure}
 
-Fig.~\ref{fig:hld_overview} shows how the operator interacts with the intelligence layer on the Pi, how the Pi exchanges newline-terminated JSON and telemetry with the ESP32 over UART, how the ESP32 connects to the physical stack, and how the Pi calls the Gemini API over the network.
+Fig.~\ref{fig:hld_overview} shows how the operator interacts with the intelligence layer on the Pi, how the Pi exchanges newline-terminated JSON and telemetry with the ESP32 over UART, how the ESP32 connects to the physical stack, and how the Pi dispatches to Groq (for text reasoning) and NVIDIA NIM (for visual understanding) over HTTPS.
 
 %-------------------------------------------------------------------
 \section{Low-Level Design Overview}
@@ -143,7 +152,7 @@ Figure~\ref{fig:usecase} relates actors to the operational use cases of the depl
 \draw (gemact) ++(-0.25,0) -- ++(0.5,0);
 \draw (gemact) ++(0,-0.22) -- ++(-0.18,-0.35);
 \draw (gemact) ++(0,-0.22) -- ++(0.18,-0.35);
-\node[font=\small\bfseries, below=0.06cm] at ([yshift=-0.55cm]gemact) {Gemini API};
+\node[font=\small\bfseries, below=0.06cm] at ([yshift=-0.55cm]gemact) {Groq + NVIDIA NIM};
 
 \draw[thick] ([xshift=0.25cm]user.east) -- (uc1.west);
 \draw[thick] ([xshift=0.25cm]user.east) -- (uc2.west);
@@ -163,7 +172,7 @@ Figure~\ref{fig:usecase} relates actors to the operational use cases of the depl
 \label{fig:usecase}
 \end{figure}
 
-The \textit{operator} powers the platform, starts or stops the Pi process, reads the OLED, and relies on obstacle behaviour in AUTO\_MODE or guided behaviour in AI\_MODE. The \textit{maintainer} adjusts serial device paths, credentials, and model identifiers. The \textit{Gemini API} participates whenever the intelligence loop issues HTTPS inference requests.
+The \textit{operator} powers the platform, starts or stops the Pi process, reads the OLED, and relies on obstacle behaviour in AUTO\_MODE or guided behaviour in AI\_MODE. The \textit{maintainer} adjusts serial device paths, credentials, and model identifiers. The \textit{Groq + NVIDIA NIM services} handle reasoning and vision whenever the intelligence loop issues inference requests.
 
 %-------------------------------------------------------------------
 \section{Component Diagram}
@@ -188,7 +197,7 @@ Figure~\ref{fig:component} packages software onto the two compute nodes and show
 
 \node[comp, fill=purple!10, below=1.5cm of pi] (net) {\textbf{Network path}\\{\scriptsize outbound HTTPS}};
 
-\node[comp, fill=purple!14, right=0.2cm of net] (gem) {\textbf{Google Gemini}\\{\scriptsize generative API}};
+\node[comp, fill=purple!14, right=0.2cm of net] (gem) {\textbf{Groq + NVIDIA NIM}\\{\scriptsize reasoning \& vision APIs}};
 
 \node[comp, fill=gray!12, below=1.4cm of esp] (bat) {\textbf{Power / mechanics}\\{\scriptsize battery, driver, motors}};
 
@@ -208,7 +217,7 @@ Figure~\ref{fig:component} packages software onto the two compute nodes and show
 \label{fig:component}
 \end{figure}
 
-The Raspberry Pi component hosts the entire \texttt{ai\_layer/} tree. The ESP32 component hosts sensing, actuation, OLED rendering, and UART framing. Gemini is an external software service accessed only from the Pi.
+The Raspberry Pi component hosts the entire \texttt{vision\_module/} tree. The ESP32 component hosts sensing, actuation, OLED rendering, and UART framing. Groq and NVIDIA NIM are external cloud services accessed from the Pi.
 
 %-------------------------------------------------------------------
 \section{Structure Chart}
@@ -231,7 +240,7 @@ Figure~\ref{fig:structure_chart} shows the static decomposition of the orchestra
 
 \node[mod, fill=green!10, below left=0.95cm and 0.15cm of main] (uart) {uart\_bridge.py\\\scriptsize serial I/O};
 \node[mod, fill=green!10, below=0.95cm of main] (ctx) {context\_builder.py\\\scriptsize prompts};
-\node[mod, fill=green!10, below right=0.95cm and 0.15cm of main] (llm) {llm\_client.py\\\scriptsize Gemini};
+\node[mod, fill=green!10, below right=0.95cm and 0.15cm of main] (llm) {task\_agent.py\\\scriptsize reasoning + vision};
 
 \node[mod, fill=red!9, below=1.05cm of ctx] (val) {safety\_validator.py\\\scriptsize validate()};
 
@@ -377,6 +386,90 @@ Safety validator & \texttt{safety\_validator.py} & Type and membership checks; c
 \textbf{Responsibility:} Run the real-time sense--act loop on the ESP32: trigger/echo ultrasonic measurements with \texttt{pulseIn}, map distances through motor primitives (\texttt{forward}, pivots, etc.) via TB6612FNG direction pins and LEDC PWM, refresh the SSD1306 via I\textsuperscript{2}C, and exchange newline-terminated messages over \texttt{Serial}.
 
 \textbf{Modes:} \texttt{AI\_MODE} activates when a valid JSON line arrives (\texttt{ArduinoJson} parse); \texttt{AUTO\_MODE} executes distance-threshold rules when no JSON is seen for \texttt{AI\_TIMEOUT\_MS} (5000\,ms). Constants such as \texttt{OBSTACLE\_DIST} and \texttt{WALL\_DIST} tune avoidance aggressiveness independently of the LLM policy on the Pi~\cite{brooks1986robust}.
+
+%-------------------------------------------------------------------
+\section{Phase~4 Multimodal Architecture}
+\label{sec:phase4_arch}
+
+Phase~4 extends the intelligence layer with voice, vision, and remote interaction capabilities orchestrated by a 7-state event-driven machine.
+
+%-------------------------------------------------------------------
+\subsection{7-State Machine}
+\label{subsec:statemachine}
+
+Figure~\ref{fig:state_machine_ch5} shows the state-transition graph for the Phase~4 orchestrator.
+
+\begin{figure}[H]
+\centering
+\resizebox{0.95\textwidth}{!}{%
+\begin{tikzpicture}[
+  state/.style={draw, thick, rounded corners=6pt, minimum width=2.2cm,
+                minimum height=1cm, align=center, font=\small\bfseries},
+  trans/.style={-{Stealth[length=2.5mm]}, thick, font=\scriptsize},
+  node distance=1.2cm and 1.6cm
+]
+\node[state, fill=gray!15]    (idle)    {IDLE};
+\node[state, fill=green!15, right=of idle]  (listen) {LISTENING};
+\node[state, fill=yellow!15, right=of listen] (think)  {THINKING};
+\node[state, fill=orange!15, below=of idle]  (act)    {ACTING};
+\node[state, fill=red!10, below=of listen]  (search) {SEARCHING};
+\node[state, fill=blue!12, below=of think]  (speak)  {SPEAKING};
+\node[state, fill=purple!10, below right=1.2cm and 0.4cm of search] (report) {REPORTING};
+
+\draw[trans] (idle)   -- node[above]{wake word / Telegram} (listen);
+\draw[trans] (listen) -- node[above]{VAD end} (think);
+\draw[trans] (think)  -- node[left,pos=0.3]{COMMAND} (act);
+\draw[trans] (think.south) -- node[right,pos=0.3]{TASK / find} (search.north);
+\draw[trans] (think) -- node[above right,pos=0.6]{QUESTION} (speak);
+\draw[trans] (act)    -- node[left]{done} (idle);
+\draw[trans] (search) -- node[below]{found / max steps} (report);
+\draw[trans] (speak)  -- node[right]{TTS done} (report);
+\draw[trans] (report) -- node[below left]{reset} (idle);
+\draw[trans, dashed, red!60!black] (search.west) -- node[above left,font=\scriptsize\itshape]{cancel} (idle.south);
+\draw[trans, dashed, red!60!black] (act.west) to[out=180,in=210] node[left,font=\scriptsize\itshape]{obstacle} (idle.west);
+\end{tikzpicture}}
+\caption{7-state event-driven machine for the Phase~4 multimodal agent. Dashed red transitions represent global cancel (obstacle detection or user stop command).}
+\label{fig:state_machine_ch5}
+\end{figure}
+
+Four concurrent daemon threads support the state machine: (1)~openWakeWord detector running offline ONNX inference at 8\% CPU, (2)~ESP32 heartbeat monitor parsing telemetry and propagating obstacle events, (3)~Telegram bot long-polling, and (4)~TTS worker queue draining speech requests.
+
+%-------------------------------------------------------------------
+\subsection{ReAct Search Algorithm}
+\label{subsec:react_search}
+
+For ``find'' tasks, a specialised ReAct loop (Fig.~\ref{fig:react_flow}) combines vision, movement, and semantic memory.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  block/.style={draw, thick, rounded corners=3pt, minimum height=0.8cm,
+                minimum width=2.8cm, align=center, font=\footnotesize},
+  decision/.style={draw, thick, diamond, aspect=2, inner sep=1pt,
+                   align=center, font=\footnotesize},
+  arr/.style={-{Stealth[length=2mm]}, thick},
+  node distance=0.55cm
+]
+\node[block, fill=blue!8] (cap) {Capture frame};
+\node[block, fill=blue!8, below=of cap] (desc) {VLM: describe scene};
+\node[decision, below=of desc] (mem) {In memory?\\(sim $>$ 0.7)};
+\node[decision, below left=0.8cm and 0.2cm of mem] (goal) {Target\\found?};
+\node[block, fill=green!10, below=0.6cm of goal] (found) {RETURN found};
+\node[block, fill=orange!10, below right=0.8cm and 0.2cm of mem] (move) {Best move\\from sensors};
+\node[block, fill=orange!10, below=of move] (exec) {Execute + store};
+
+\draw[arr] (cap) -- (desc);
+\draw[arr] (desc) -- (mem);
+\draw[arr] (mem) -- node[left,font=\tiny]{no} (goal);
+\draw[arr] (mem) -- node[above,font=\tiny]{yes (skip)} (move);
+\draw[arr] (goal) -- node[left,font=\tiny]{yes} (found);
+\draw[arr] (goal.east) -- node[above,font=\tiny]{no} (move.west);
+\draw[arr] (move) -- (exec);
+\draw[arr] (exec.east) -- ++(0.8,0) |- node[right,font=\tiny,pos=0.25]{next step} (cap.east);
+\end{tikzpicture}
+\caption{ReAct search flowchart: capture $\to$ describe $\to$ memory check $\to$ goal check $\to$ move $\to$ loop. Semantic memory (similarity threshold 0.7, auto-lowered to 0.5 after 5 skips) prevents revisiting.}
+\label{fig:react_flow}
+\end{figure}
 
 %-------------------------------------------------------------------
 \section{Summary}

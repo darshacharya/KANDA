@@ -17,6 +17,7 @@
 \usepackage{setspace}                     % 1.5 line spacing
 \usepackage{fancyhdr}                     % custom headers/footers
 \usepackage{graphicx}
+\graphicspath{{images/}}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}                     % nice tables
 \usepackage{longtable}                    % multi-page tables
@@ -152,6 +153,10 @@
 \pagenumbering{roman}
 \pagestyle{empty}
 \input{chapters/00_prelims}
+
+\listoffigures
+\listoftables
+\clearpage
 
 % ---- Main Chapters (arabic numerals, full header/footer) ----
 \pagenumbering{arabic}

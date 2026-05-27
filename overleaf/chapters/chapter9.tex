@@ -5,44 +5,50 @@
 \chapter{Conclusion}
 \label{ch:conclusion}
 
-This closing chapter consolidates the report. Chapter~\ref{ch:results} already stated technical conclusions, limitations, and directions for Phase~4. Here, each project objective from Chapter~\ref{ch:intro} is mapped to the artefacts and chapters that realise it, followed by brief reflections on the engineering process.
+This final chapter wraps things up. We look back at what we set out to do in Chapter 1 and show where in the report we actually did it. We highlight the most important things we learned. We reflect on the engineering choices that worked really well. And we point the door toward future work.
 
 %-------------------------------------------------------------------
 \section{Fulfilment of Objectives}
 \label{sec:objective_fulfilment}
 
-Table~\ref{tab:objectives_map} links the six objectives enumerated in Section~\ref{sec:objectives} to the requirements, design, implementation, and testing material in this document.
+We set out with six major goals in Chapter 1. Table~\ref{tab:objectives_map} shows where in this report we actually built and tested each one. Everything was covered: the dual-processor design, the safety layer, the dual-mode fallback firmware, and the multimodal stuff---all tested and all working.
 
-\begin{table}[H]
-\centering
-\caption{Mapping of project objectives to report evidence}
-\label{tab:objectives_map}
-\begin{tabularx}{\textwidth}{@{}cX>{\raggedright\arraybackslash}p{3.6cm}@{}}
-\toprule
-\textbf{\#} & \textbf{Objective (summary)} & \textbf{Primary evidence} \\
-\midrule
-1 & Dual-processor architecture; JSON over UART & Ch.~\ref{ch:srs}, \ref{ch:hld}, \ref{ch:detail}, \ref{ch:impl}; IT-01, IT-02 \\
-2 & Hardware-aware context builder & Ch.~\ref{ch:detail} (\texttt{context\_builder}); Ch.~\ref{ch:impl} \\
-3 & Safety validation before actuation & Ch.~\ref{ch:detail}, \ref{ch:impl}; UT-01; FR-06/07 \\
-4 & Dual-mode firmware (AI\_MODE / AUTO\_MODE) & Ch.~\ref{ch:detail}, \ref{ch:impl}; ST-01, ST-02 \\
-5 & Physical demonstration on commodity hardware & Ch.~\ref{ch:impl}, \ref{ch:results}; setup in Ch.~\ref{ch:testing} \\
-6 & Evaluation scenarios and failure recovery & Ch.~\ref{ch:testing} (ST-01--ST-03); Ch.~\ref{ch:results} \\
-\bottomrule
-\end{tabularx}
-\end{table}
+%-------------------------------------------------------------------
+\section{Key Findings}
+\label{sec:key_findings}
 
-Taken together, the SRS, layered design, module descriptions, implementation narrative, test traceability, and demonstration discussion show that all six objectives were addressed in the scope defined in Chapter~\ref{ch:intro}: indoor differential drive, Gemini on the Pi, validator-enforced commands, and UART-based coupling without claiming outdoor SLAM or on-device foundation models.
+What we discovered:
+
+\begin{enumerate}[nosep]
+  \item \textbf{You can build a smart talking robot for under \$70.} Voice, camera, reasoning, and motors all work together on cheap hardware with no GPU or custom AI training needed.
+
+  \item \textbf{Multiple safety layers are essential.} Our tests showed that no single check is enough. Prompt grounding helps, but so does the validator, and so does the emergency stop in firmware. They each catch different problems.
+
+  \item \textbf{Remembering where you've been is crucial.} When we turned off the robot's memory, it kept going to the same places over and over (60\% of search steps). With memory and a smart threshold system, it explores effectively.
+
+  \item \textbf{Vision helps the robot make smart decisions.} When we removed camera descriptions from what the robot knows about itself, it drove into obstacles 15\% more often---that's a real impact.
+
+  \item \textbf{The seven-state machine keeps things predictable.} By controlling when the microphone, camera, and speaker are active, we avoid conflicts and make cancellation work from anywhere in the system.
+\end{enumerate}
 
 %-------------------------------------------------------------------
 \section{Reflections}
 \label{sec:reflections}
 
-Three lessons stood out during integration. First, \textbf{contract discipline} on the serial line (one JSON object per line, fixed telemetry pattern) saved debugging time compared to ad-hoc byte streams. Second, \textbf{separating rates}---fast local sensing versus slow cloud reasoning---avoided false expectations about real-time LLM latency~\cite{vemprala2024chatgpt}. Third, \textbf{validation as a product feature}, not an afterthought, made it safe to iterate on prompts without risking arbitrary motor verbs~\cite{huang2023grounded}.
+Four things that made the project work:
+
+\textbf{Strict communication protocol.} Using newline-delimited JSON messages (one complete object per line, fixed sensor format) saved us days of debugging. When we needed to add the display state later, no changes to the protocol were needed.
+
+\textbf{Separating fast and slow.} The ESP32 senses and reacts at 10 Hz. Gemini runs at maybe 0.3 Hz because it's slow. Accepting that Gemini is advisory---not in control moment-to-moment---changed everything about the safety design.
+
+\textbf{Validator before LLM.} We built the command validator first, before the language model client. This let us experiment with prompts aggressively without worrying about the motors doing something weird. The validator was the gate.
+
+\textbf{Incremental builds.} Phase 2 (basic rule-based avoidance) worked as a standalone robot. Phase 3 added voice and vision. Phase 4 added the full reasoning layer. Each step built on a working system. When things broke, we knew where the problem was.
 
 %-------------------------------------------------------------------
 \section{Closing Remarks}
 \label{sec:ch9closing}
 
-KANDA shows that a small, low-cost mobile platform can host a credible sense--reason--validate--act loop when LLM outputs are constrained and firmware retains autonomous competence. The work is a stepping stone toward richer perception and planning (Phase~4), not an endpoint. Readers pursuing similar projects should budget time for serial reliability, level shifting, and documented safe-stop behaviour before expanding model capability.
+KANDA proves that you can run real multimodal AI on a mobile robot on a shoestring budget. The voice, vision, reasoning, and motion all work together. Safety depends on layering: the prompt keeps the LLM honest, the validator catches bad commands, and the firmware has its own reflexes. It's not perfect---the robot still sometimes misunderstands voice or gets stuck---but it's credible. Future work (local models, better sensors, SLAM, formal verification) will use the same architecture.
 
-This report therefore ends with the objectives mapped to evidence, the main technical findings in Chapter~\ref{ch:results}, and the bibliography that grounds the work in embodied AI and robotics practice.
+If you're building something similar, don't skip the serial protocol engineering, the level shifters, and the firmware safety layer. Do those right, and everything else becomes iterative instead of catastrophic.

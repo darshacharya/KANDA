@@ -5,7 +5,7 @@
 \chapter{Software Requirement Specification}
 \label{ch:srs}
 
-This chapter presents the Software Requirement Specification (SRS) for \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)}. It describes the product perspective, functions, user classes, constraints, and specific functional and non-functional requirements for the dual-layer system (ESP32 embodiment layer and Raspberry Pi intelligence layer). The SRS serves as the formal contract between the system design and the implementation. Design principles for grounding LLM outputs in robot capabilities follow established robotics--LLM practice~\cite{vemprala2024chatgpt,ahn2022saycan}.
+This chapter presents the Software Requirement Specification (SRS) for \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)}. It documents the product perspective, functions, user classes, constraints, and both functional and non-functional requirements for the dual-layer system (ESP32 embodiment layer and Raspberry Pi intelligence layer). The SRS is the formal contract between system design and implementation. Design principles follow established robotics-LLM practice for grounding LLM outputs in robot capabilities~\cite{vemprala2024chatgpt,ahn2022saycan}.
 
 %-------------------------------------------------------------------
 \section{Overall Description}
@@ -20,14 +20,18 @@ KANDA is a standalone embedded robotic system consisting of two cooperating soft
 \begin{itemize}[nosep]
   \item \textbf{Embodiment firmware (ESP32):} Arduino-compatible C++ firmware under \path|firmware/phase2_obstacle_avoidance/| on an ESP32 DevKit. It performs ultrasonic sensing, motor PWM control via TB6612FNG, SSD1306 OLED display updates, and UART messaging with the companion computer.
 
-  \item \textbf{Intelligence layer (Raspberry Pi):} Python modules in \path|ai_layer/| that read telemetry from the serial port, compose a hardware-aware prompt, call the Google Gemini API, validate the returned JSON command, and transmit it to the ESP32.
+  \item \textbf{Intelligence layer (Raspberry Pi):} Python modules in \path|vision_module/| that read telemetry from the serial port, compose a hardware-aware prompt, call Groq (for text reasoning and speech-to-text) or NVIDIA NIM (for visual scene understanding), validate the returned JSON command, and transmit it to the ESP32.
 
 \end{itemize}
 
-The system interfaces with the following external components:
+The system interfaces with the following external services and components:
 
 \begin{itemize}[nosep]
-  \item \textbf{Gemini API:} Cloud-hosted Google \textbf{Gemini 2.5 Flash} (default model identifier \texttt{gemini-2.5-flash}) accessed via \texttt{google.generativeai}; requires \texttt{GEMINI\_API\_KEY} in the environment and network connectivity on the Raspberry Pi. The model id may be overridden with environment variable \texttt{GEMINI\_MODEL} for reproducibility and A/B testing~\cite{vemprala2024chatgpt}.
+  \item \textbf{Groq API:} Cloud-hosted Groq inference service running \texttt{llama-3.3-70b-versatile}. Handles text reasoning (motion planning) and automatic speech recognition (ASR). Free tier: 30 requests/min effectively unlimited in practice. Accessed via OpenAI-compatible REST endpoint; requires \texttt{GROQ\_API\_KEY} environment variable.
+
+  \item \textbf{NVIDIA NIM API:} Cloud-hosted NVIDIA model service running \texttt{meta/llama-3.2-11b-vision-instruct}. Handles visual scene understanding and object detection. Free tier: 40 requests/min. Accessed via OpenAI-compatible REST endpoint; requires \texttt{NVIDIA\_API\_KEY} environment variable.
+
+  \item \textbf{Google TTS (gtts):} Optional cloud text-to-speech service for natural-sounding speech output. Runs on-demand, no API key required, but needs internet. Fallback: offline \texttt{espeak-ng} for robotic fallback voice.
 
   \item \textbf{UART link:} Serial connection between Raspberry Pi and ESP32 at 115,200 baud. The device path is set via \texttt{KANDA\_SERIAL\_PORT} (for example \path|/dev/ttyS0| or \path|/dev/ttyUSB0|).
 
@@ -40,17 +44,19 @@ KANDA is not a hosted web service in the deployed configuration; the Pi runs the
 \subsection{LLM Model Selection and System Alignment}
 \label{subsec:alignment}
 
-\textbf{Default model.} The intelligence layer targets \textbf{Gemini 2.5 Flash} (\texttt{gemini-2.5-flash}) as the default production model: it balances multimodal reasoning quality with latency and cost suitable for repeated calls in a physical control loop.
+\textbf{API services.} Two complementary cloud services handle different workloads. Groq manages text and reasoning tasks plus automatic speech recognition, running Llama 3.3 70B. NVIDIA NIM handles visual understanding, running Llama 3.2 11B Vision. Both receive structured prompts with sensor context and return task-specific outputs. The dispatch logic sends reasoning requests to Groq and visual questions to NVIDIA, rather than routing all problems to a single model.
 
-\textbf{Alignment (three layers).} ``Alignment'' here means keeping model behaviour consistent with safe robot operation, not merely stylistic compliance:
+\textbf{Why two services?} Earlier versions used Gemini 2.5 Flash as a single LLM. Specialization proved more effective. Dedicated text models are faster for reasoning. Dedicated vision models handle visual questions better. When one service reaches its rate limit, the robot switches to the other and continues working instead of blocking.
+
+\textbf{Keeping the model honest (three layers of grounding).} Safety depends on multiple independent checks. Each layer addresses different failure modes:
 
 \begin{enumerate}[label=\arabic*., nosep]
-  \item \textbf{Specification alignment (prompt):} The hardware-description prompt fixes the action grammar, speed bounds, sensor semantics, and explicit safety rules so the policy implied by the prompt matches platform affordances~\cite{ahn2022saycan,vemprala2024chatgpt}.
-  \item \textbf{Decoding alignment (generation):} Low sampling temperature and JSON-only output contracts reduce gratuitous variance and ease parsing on the microcontroller path.
-  \item \textbf{Runtime alignment (validation):} Every decoded command passes through the validator, which enforces a finite action set and numeric clamps before GPIO/PWM actuation---mirroring command-level grounded filtering~\cite{huang2023grounded}.
+  \item \textbf{Specification alignment (prompt):} The hardware-description prompt defines the action grammar, speed bounds, sensor semantics, and explicit safety rules. This makes the prompt match what the platform can actually do~\cite{ahn2022saycan,vemprala2024chatgpt}.
+  \item \textbf{Decoding alignment (generation):} Low temperature sampling and JSON-only output reduce variance and make parsing simple on the microcontroller~\cite{}.
+  \item \textbf{Runtime alignment (validation):} Every command passes through the validator before actuation. The validator enforces a finite action set and clamps numeric values~\cite{huang2023grounded}.
 \end{enumerate}
 
-Together these layers ensure traceability from sensor context $\rightarrow$ model proposal $\rightarrow$ validated actuator command.
+Each layer catches different problems. Sensor data informs the prompt, the model proposes an action, and the validator stops anything unsafe before it reaches the motors.
 
 %-------------------------------------------------------------------
 \subsection{Product Functions}
@@ -64,7 +70,7 @@ The primary functions of KANDA are:
 
 \textbf{F3, Prompt construction:} Build a hardware-description prompt including valid motion primitives, speed bounds, safety rules, and current sensor readings~\cite{ahn2022saycan}.
 
-\textbf{F4, LLM inference:} Send the prompt to Gemini 2.5 Flash with low temperature and short maximum output length to obtain a JSON object with \texttt{action} and \texttt{speed} fields (one object per response).
+\textbf{F4, LLM inference:} For text-based tasks (motion planning), send the prompt to Groq Llama 3.3 70B to obtain a JSON array of motor commands. For visual tasks (object detection, scene questions), send the image and prompt to NVIDIA NIM Llama 3.2 11B Vision to get yes/no or descriptive answers. Both use low temperature (greedy decoding) and structured JSON output.
 
 \textbf{F5, Command validation:} Verify action membership in the configured whitelist, coerce speed to integer, clamp to $[0,255]$, and substitute a safe stop command on failure~\cite{huang2023grounded}.
 
@@ -72,9 +78,9 @@ The primary functions of KANDA are:
 
 \textbf{F7, Motor actuation:} Parse JSON on the ESP32 and drive TB6612FNG inputs (direction + PWM) to realise forward, backward, turns, slight corrections, or stop.
 
-\textbf{F8, Status display:} Render current mode and behaviour on the SSD1306 OLED.
+\textbf{F8, Status display:} The SSD1306 OLED (128×64) shows the robot's state through an animated face. Humans instinctively look at the robot's face to understand what it's doing. Animated states make this obvious: IDLE shows a listening face, LISTENING shows a recording waveform, THINKING shows a thinking emoji, ACTING shows movement, SEARCHING shows a search pattern, SPEAKING shows a speech bubble, REPORTING shows completion. This simple feature reduced debugging time significantly, since the state was visible without reading logs.
 
-\textbf{F9, Dual-mode operation:} Switch to AI\_MODE when valid JSON lines are received from the Pi; revert to AUTO\_MODE (rule-based obstacle avoidance) after a configurable UART silence timeout (default 5000\,ms in firmware).
+\textbf{F9, Dual-mode operation:} The ESP32 has two operating modes. When valid JSON arrives from the Pi, it runs in AI\_MODE and executes cloud-based decisions. If the Pi goes silent for 3 seconds (timeout: \texttt{AI\_TIMEOUT\_MS=3000}), the firmware switches to AUTO\_MODE. In AUTO\_MODE, the ESP32 runs local obstacle avoidance using the ultrasonic sensors. This fallback means if the Pi crashes or loses network, the robot keeps avoiding obstacles instead of freezing or crashing.
 
 \textbf{F10, Safe shutdown:} On AI layer exit or error, send stop commands where applicable to leave the robot in a safe state.
 
@@ -107,13 +113,13 @@ Lab Maintainer      & Advanced       & Manages hardware calibration, wiring, sup
 
   \item[C2, Language] LLM prompts and documentation are English; future speech modalities are out of scope for this SRS revision.
 
-  \item[C3, Network] Gemini inference requires outbound HTTPS from the Raspberry Pi; autonomous obstacle avoidance remains available without the cloud when operating in AUTO\_MODE on the ESP32 alone.
+  \item[C3, Network] Groq and NVIDIA NIM inference require outbound HTTPS. The robot maintains obstacle avoidance without cloud services by switching to AUTO\_MODE on the ESP32.
 
-  \item[C4, Credentials] The Gemini API key must be supplied via environment variable; no hard-coded secrets in source repositories.
+  \item[C4, Credentials] API keys must be supplied via environment variables. Source repositories contain no hard-coded secrets.
 
   \item[C5, Electrical] HC-SR04 ECHO outputs are 5V; ESP32 GPIO inputs require compliant level shifting (e.g.\ resistor dividers) as implemented in hardware.
 
-  \item[C6, Real-Time Bound] LLM latency is non-deterministic; the system shall not assume sub-second planning latency while still maintaining safe motion limits via firmware timeouts and validation~\cite{huang2023grounded}.
+  \item[C6, Real-Time Bound] LLM latency varies and is not deterministic. The system does not assume sub-second planning. Instead, firmware timeouts and validation layers maintain safe motion limits~\cite{huang2023grounded}.
 \end{description}
 
 %-------------------------------------------------------------------
@@ -145,7 +151,7 @@ FR-01 & The embodiment layer shall sample three ultrasonic rangefinders and comp
 FR-02 & The embodiment layer shall transmit structured telemetry from ESP32 to Raspberry Pi over UART at 115,200 baud & High \\
 FR-03 & The intelligence layer shall parse inbound telemetry into numeric front/left/right distances for prompt construction & High \\
 FR-04 & The intelligence layer shall assemble a hardware-description prompt listing legal actions, speed bounds, safety rules, and live sensor readings & High \\
-FR-05 & The intelligence layer shall invoke the configured Gemini model and obtain a response parseable as JSON with \texttt{action} and \texttt{speed} fields & High \\
+FR-05 & The intelligence layer shall invoke Groq (text) or NVIDIA NIM (vision) as configured and obtain a response parseable as JSON with \texttt{action} and \texttt{speed} (or task-specific fields for multimodal flows) & High \\
 FR-06 & The intelligence layer shall validate each command's \texttt{action} against \texttt{VALID\_ACTIONS}, coerce \texttt{speed} to integer, and clamp to $[0,255]$ before transmission & High \\
 FR-07 & On validation failure or malformed output, the intelligence layer shall substitute a safe stop (e.g.\ \path|{"action":"stop","speed":0}|) & High \\
 FR-08 & The intelligence layer shall transmit one JSON command line per cycle to the ESP32 over the open serial port & High \\
@@ -189,7 +195,7 @@ PR-07 & Serial port stabilisation (cold start) & Allow $\approx$2\,s after openi
 \centering
 \caption{Software requirements}
 \label{tab:sw_req}
-\begin{tabularx}{\textwidth}{@{}lX@{}}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}X@{}}
 \toprule
 \textbf{Component} & \textbf{Requirement} \\
 \midrule
@@ -197,9 +203,9 @@ Embodiment toolchain & Arduino IDE or PlatformIO; ESP32 Arduino core v3+ \\
 Firmware libraries     & Wire; Adafruit SSD1306 / GFX; ArduinoJson \\
 Intelligence OS        & Raspberry Pi OS or compatible Linux on Raspberry Pi \\
 Python                 & Python 3.10+ recommended \\
-LLM client             & Package \texttt{google.generativeai}; default model id \texttt{gemini-2.5-flash}; override with env.\ \texttt{GEMINI\_MODEL} \\
+LLM / VLM clients      & HTTPS to Groq (\texttt{llama-3.3-70b-versatile}) and NVIDIA NIM (\texttt{meta/llama-3.2-11b-vision-instruct}); keys \texttt{GROQ\_API\_KEY}, \texttt{NVIDIA\_API\_KEY} \\
 Serial I/O             & Package \texttt{pyserial} \\
-Configuration          & Env.\ vars \texttt{GEMINI\_API\_KEY} and \texttt{KANDA\_SERIAL\_PORT} \\
+Configuration          & Env.\ vars above plus \texttt{KANDA\_SERIAL\_PORT} \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -220,14 +226,51 @@ ESP32 DevKit & 38-pin module & Wi-Fi-capable; GPIO set per pin map \\
 Motor driver & TB6612FNG or equivalent dual H-bridge & Motor supply separate from logic rails \\
 Ultrasonic sensors & 3$\times$ HC-SR04 & Dividers on ECHO lines to 3.3\,V logic \\
 Display & SSD1306 128$\times$64 I\textsuperscript{2}C & Typical address \texttt{0x3C} \\
-Raspberry Pi & Pi 3B+ or newer & Hosts intelligence layer; network needed for Gemini \\
+Raspberry Pi & Pi 3B+ or newer & Hosts intelligence layer; network needed for Groq and NVIDIA NIM \\
 Power & LiPo, BMS, buck converter & Motors not powered from the logic regulator \\
 USB serial link & Optional USB--UART adapter & Use if not wiring Pi UART GPIO to ESP32 \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\textit{Note: GPU acceleration is not required for the specified Gemini API configuration. On-device LLM inference is out of scope.}
+\textit{Note: GPU acceleration is not required on the Pi; inference uses cloud APIs. On-device LLM inference is out of scope.}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  comp/.style={draw, thick, rounded corners=3pt, minimum height=0.8cm,
+               minimum width=2.4cm, align=center, font=\footnotesize},
+  bus/.style={draw, thick, -{Stealth[length=2mm]}},
+  dbus/.style={draw, thick, {Stealth[length=2mm]}-{Stealth[length=2mm]}},
+  node distance=0.6cm and 1.0cm
+]
+% Cloud
+\node[comp, fill=gray!10, dashed] (cloud) {Groq + NVIDIA NIM\\(Cloud)};
+% Pi
+\node[comp, fill=blue!10, below=1.2cm of cloud] (pi) {Raspberry Pi 4\\Intelligence Layer};
+\node[comp, fill=blue!5, left=0.6cm of pi, minimum width=1.5cm] (cam) {Pi Camera\\v2.1};
+\node[comp, fill=blue!5, right=0.6cm of pi, minimum width=1.5cm] (mic) {USB Mic\\+ Speaker};
+% ESP32
+\node[comp, fill=orange!12, below=1.2cm of pi] (esp) {ESP32 DevKit\\Embodiment Layer};
+% Peripherals
+\node[comp, fill=yellow!10, below left=0.8cm and 0.8cm of esp, minimum width=1.8cm] (motor) {TB6612FNG\\Motors};
+\node[comp, fill=yellow!10, below=0.8cm of esp, minimum width=1.8cm] (sensor) {HC-SR04\\$\times$3};
+\node[comp, fill=yellow!10, below right=0.8cm and 0.8cm of esp, minimum width=1.8cm] (oled) {SSD1306\\OLED};
+% Power
+\node[comp, fill=red!8, right=0.6cm of esp, minimum width=1.5cm] (pwr) {LiPo+BMS\\Buck 5V};
+% Connections
+\draw[dbus] (pi) -- node[right, font=\tiny]{HTTPS} (cloud);
+\draw[dbus] (pi) -- node[right, font=\tiny]{UART 115200} (esp);
+\draw[bus] (cam) -- (pi);
+\draw[bus] (mic) -- (pi);
+\draw[bus] (esp) -- (motor);
+\draw[dbus] (esp) -- (sensor);
+\draw[bus] (esp) -- (oled);
+\draw[bus] (pwr) -- (esp);
+\end{tikzpicture}
+\caption{Hardware interconnection block diagram showing the three-tier topology: cloud, edge (Pi~4 with camera and audio), and device (ESP32 with motor driver, sensors, and display).}
+\label{fig:hw_block}
+\end{figure}
 
 %-------------------------------------------------------------------
 \subsection{Design Constraints}
@@ -251,4 +294,4 @@ USB serial link & Optional USB--UART adapter & Use if not wiring Pi UART GPIO to
 \section{Summary}
 \label{sec:ch3summary}
 
-This chapter presented the Software Requirement Specification for KANDA. The product perspective separated the ESP32 embodiment layer from the Raspberry Pi intelligence layer and identified external dependencies (Gemini 2.5 Flash API, UART, power). Section~\ref{subsec:alignment} formalised default model selection (\texttt{gemini-2.5-flash}) and a three-layer \textit{alignment} strategy: specification (prompt), decoding (temperature and JSON contract), and runtime validation before actuation. Ten product functions covered sensing, telemetry, prompting, inference, validation, actuation, display, dual-mode operation, and shutdown behaviour. Four user classes were defined from operator to maintainer. Constraints addressed environment, language, network, credentials, electrical interfacing, and stochastic LLM latency. Fifteen functional requirements, seven performance targets aligned with implementation constants, software and hardware dependency tables, and six design constraints formalised the contract for subsequent design chapters. Grounding and validation requirements~\cite{ahn2022saycan,huang2023grounded,vemprala2024chatgpt} are central to DC-01 and DC-02 and underpin the high-level architecture in Chapter~4.
+This chapter presented the Software Requirement Specification for KANDA. The product perspective separated the ESP32 embodiment layer from the Raspberry Pi intelligence layer and identified external dependencies (Groq and NVIDIA NIM APIs, UART, power). Section~\ref{subsec:alignment} formalised the dual-service model selection and a three-layer \textit{alignment} strategy: specification (prompt), decoding (temperature and JSON contract), and runtime validation before actuation. Ten product functions covered sensing, telemetry, prompting, inference, validation, actuation, display, dual-mode operation, and shutdown behaviour. Four user classes were defined from operator to maintainer. Constraints addressed environment, language, network, credentials, electrical interfacing, and stochastic LLM latency. Fifteen functional requirements, seven performance targets aligned with implementation constants, software and hardware dependency tables, and six design constraints formalised the contract for subsequent design chapters. Grounding and validation requirements~\cite{ahn2022saycan,huang2023grounded,vemprala2024chatgpt} are central to DC-01 and DC-02 and underpin the high-level architecture in Chapter~4.

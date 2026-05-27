@@ -5,7 +5,7 @@
 \chapter{High Level Design}
 \label{ch:hld}
 
-This chapter presents the high-level design of \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)}. It records design considerations that follow from the Software Requirement Specification (Chapter~3), the phased development approach, architectural strategies for the dual-processor stack, an overview diagram of the layered architecture, and data flow diagrams at three levels of abstraction. The design separates real-time embodiment on the ESP32 from asynchronous language-model inference on the Raspberry Pi, with an explicit validation boundary before actuation~\cite{brooks1986robust,huang2023grounded}.
+This chapter explains how we designed KANDA to solve the problems from Chapter 1 while meeting the requirements from Chapter 3. Rather than start with formal specifications, we describe the real design choices and their rationale. The ESP32 handles time-critical sensing and motor control. The Raspberry Pi handles slower language-model tasks. Safety comes from three independent validation layers that check every command before motors run. We learned early that language models produce garbage sometimes, and you don't want that reaching the motors.
 
 %-------------------------------------------------------------------
 \section{Design Considerations}
@@ -17,29 +17,32 @@ This chapter presents the high-level design of \textbf{Knowledge-driven Autonomo
 
 The following considerations shaped the high-level design of KANDA:
 
-\textbf{Safety before motion:} Large language model outputs are stochastic; direct execution on hardware would risk invalid verbs, out-of-range speeds, or malformed structures~\cite{ahn2022saycan}. Every candidate command therefore passes through schema checks, membership in a finite action set, and numeric clamping before PWM or direction pins change~\cite{huang2023grounded}.
+\textbf{Safety before motion:} Language models sometimes produce invalid output. Malformed JSON, made-up action names, speed values outside the valid range. Raw LLM output cannot go directly to motors. Every command must pass strict checks. Is it valid JSON? Is the action in the whitelist? Is the speed between 0 and 255? If any check fails, the robot stops.
 
-\textbf{Layered embodied architecture:} Sense--reason--act behaviour is organised into layers---physical sensing and actuation, microcontroller execution, serial messaging, and companion-computer reasoning---consistent with layered control for mobile robots~\cite{brooks1986robust}. Each layer exposes narrow interfaces (telemetry lines, JSON lines) so responsibilities remain traceable.
+\textbf{Layered architecture:} All components organize into independent layers. The bottom layer handles raw sensing and motor control (ESP32). The middle layer manages message passing and validation (Raspberry Pi). The top layer does reasoning (Groq, NVIDIA NIM). Each layer has a narrow interface: telemetry lines and JSON lines only. This makes debugging easier because you know where to look when something breaks.
 
-\textbf{Timing separation:} Ultrasonic sampling and motor PWM require deterministic loops on the ESP32; inference over HTTPS to Gemini is asynchronous and variable in latency~\cite{vemprala2024chatgpt}. The architecture never assumes sub-second LLM latency for safety-critical reactions; firmware timeouts and AUTO\_MODE fallback preserve basic collision avoidance when the intelligence layer is slow or unavailable.
+\textbf{Timing mismatch:} The ESP32 samples sensors every 100 milliseconds. Cloud API calls take 1.5 to 4 seconds. Waiting for every cloud response would freeze the robot. Instead, the ESP32 runs local obstacle-avoidance logic independently. When the Pi goes silent (network lag or API timeout), the ESP32 avoids obstacles on its own. Not intelligent, but safe.
 
-\textbf{Structured command interface:} Motor intents are expressed only as single-line JSON objects with \texttt{action} and \texttt{speed}, aligning language-model outputs with executable motor primitives~\cite{vemprala2024chatgpt}. Natural language never crosses the UART boundary to firmware parsers.
+\textbf{Structured commands:} Instead of sending natural language to the firmware ("move forward carefully"), we send only JSON with two fields: \texttt{action} (must be one of seven words) and \texttt{speed} (must be 0--255). This way the firmware parser is dead simple and cannot be confused.
 
-\textbf{Observability:} The intelligence layer logs cycles, telemetry summaries, raw model output (where enabled), validation outcomes, and errors on the Raspberry Pi. The OLED on the robot surfaces mode and behaviour for the operator.
+\textbf{Observability:} The OLED screen shows the robot's current state (listening, thinking, acting, searching). You can watch the robot without opening a terminal. The Pi logs all events as well. This combination saved countless debugging hours.
 
-\textbf{Graceful degradation:} Loss of cloud connectivity or Python process failure must not leave motion undefined: firmware reverts to rule-based obstacle avoidance after a UART silence threshold while electrical limits remain enforced.
+\textbf{Graceful degradation:} Loss of Wi-Fi, API downtime, or Pi crashes don't freeze the robot. The firmware detects silence from the Pi and switches to obstacle-avoidance mode. Not smart, but the robot stays alive.
 
 %-------------------------------------------------------------------
 \subsection{Development Methods}
 \label{subsec:dev_methods}
 
-KANDA was developed using an \textbf{incremental phased methodology}: each phase delivers a working baseline before the next layer is added.
+KANDA was built incrementally: each phase works on its own before we added the next layer.
 
 \begin{description}[nosep]
-  \item[Phase 1, Foundations:] Problem formulation, literature survey, requirements and architecture sketches (Chapters~1--3).
-  \item[Phase 2, Embodiment layer:] ESP32 firmware with HC-SR04 sensing, TB6612FNG motor drive, SSD1306 display, voltage-divided ECHO inputs, and standalone obstacle-avoidance logic (AUTO\_MODE baseline).
-  \item[Phase 3, Intelligence layer:] Raspberry Pi hosts Python modules for UART I/O, hardware-aware prompt construction, Gemini API calls (default \textbf{Gemini 2.5 Flash}), JSON validation, and closed-loop command transmission; firmware extended for AI\_MODE with watchdog fallback.
-  \item[Phase 4 (future), Multimodal agent:] Camera, microphone, speaker, and richer planners---out of scope for the current high-level design baseline but anticipated using composed multimodal reasoning~\cite{zeng2023socratic,wu2023tidybot}.
+  \item[Phase 1, Foundations:] Read papers, sketch requirements, design the basic architecture (Chapters 1-3). Nothing physical yet.
+  
+  \item[Phase 2, Embodiment layer:] Get the ESP32 working: read ultrasonic sensors, drive motors via the H-bridge, display status on the OLED. By itself, it could avoid obstacles. No Pi, no AI, just firmware. This baseline took longer than expected because voltage dividers and sensor crosstalk are tricky.
+  
+  \item[Phase 3, Intelligence layer:] Add the Raspberry Pi running Python, connect to Groq (text) and NVIDIA NIM (vision), build prompts, send JSON commands to the ESP32. The firmware gets an AI\_MODE for good commands and an AUTO\_MODE fallback when the Pi is silent. The 3-second timeout proved critical for safety.
+  
+  \item[Phase 4, Multimodal agent:] Add camera, microphone, wake-word detection, text-to-speech, Telegram bot, and a 7-state event machine. The OLED gets animated faces. The Pi understands images and voice. This phase focuses on integration. ReAct search with semantic memory prevents revisiting areas.
 \end{description}
 
 %-------------------------------------------------------------------
@@ -52,7 +55,7 @@ KANDA was developed using an \textbf{incremental phased methodology}: each phase
 
 \textbf{Arduino-compatible C++} targets the ESP32 firmware: direct register and peripheral access, deterministic sampling intervals, mature motor-control patterns, and small binary size~\cite{espressif2023esp32}.
 
-\textbf{Python~3} targets the Raspberry Pi intelligence layer: the official Google Generative AI client (\texttt{google.generativeai}), \texttt{pyserial} for UART, rapid iteration on prompts and validation rules, and structured logging~\cite{vemprala2024chatgpt}.
+\textbf{Python~3} targets the Raspberry Pi intelligence layer: \texttt{pyserial} for UART communication, and fast iteration on reasoning. The system uses two cloud APIs: Groq Llama 3.3 70B for text reasoning and motion planning, and NVIDIA NIM Llama 3.2 11B Vision for visual scene understanding. We use \texttt{openWakeWord} (offline, no API) for wake detection, Google Text-to-Speech (free, no key) for voice output, and \texttt{picamera2} for image capture.
 
 \textbf{JSON line protocol} over UART at 115,200 baud provides human-readable debugging, explicit message boundaries (newline-terminated lines), and straightforward parsing on both ends without custom framing beyond newline delimiters.
 
@@ -60,7 +63,42 @@ KANDA was developed using an \textbf{incremental phased methodology}: each phase
 \subsection{Future Extensions}
 \label{subsec:future}
 
-Planned extensions beyond the current baseline include multimodal prompts (vision and speech), longer-horizon planning~\cite{wake2023gptrobot}, on-device buffering of telemetry for offline analysis, and optional local-model experiments---without removing the validation layer before actuation~\cite{huang2023grounded}.
+Planned extensions beyond the baseline include on-device telemetry buffering, SLAM integration, depth sensors, and local-model experiments (Gemma 2B). All future work maintains the validation layer before actuation~\cite{huang2023grounded}.
+
+%-------------------------------------------------------------------
+\subsection{Safety Validation Pipeline}
+\label{subsec:safety_pipeline}
+
+A central design principle is \textbf{defence-in-depth}: no single layer alone protects the physical plant. Figure~\ref{fig:safety_pipeline} illustrates the three-layer safety pipeline that intercepts every command between the LLM and the motors.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  block/.style={draw, thick, rounded corners=3pt, minimum height=0.9cm,
+                minimum width=3.2cm, align=center, font=\footnotesize},
+  arr/.style={-{Stealth[length=2.5mm]}, thick},
+  node distance=0.6cm
+]
+\node[block, fill=gray!10] (prompt) {Specification\\(Body-Context Prompt)};
+\node[block, fill=yellow!12, below=of prompt] (llmout) {LLM Output\\(JSON candidate)};
+\node[block, fill=orange!15, below=of llmout] (validator) {Runtime Validator\\(whitelist + clamp)};
+\node[block, fill=green!12, below=of validator] (uart) {UART Transmission\\(validated JSON)};
+\node[block, fill=red!10, below=of uart] (firmware) {Firmware Safety\\(obstacle stop)};
+\node[block, fill=blue!8, below=of firmware] (motors) {Motor Actuation};
+
+\draw[arr] (prompt) -- node[right, font=\tiny]{action vocab, safety rules} (llmout);
+\draw[arr] (llmout) -- node[right, font=\tiny]{may be malformed} (validator);
+\draw[arr] (validator) -- node[right, font=\tiny]{always valid dict} (uart);
+\draw[arr] (uart) -- (firmware);
+\draw[arr] (firmware) -- node[right, font=\tiny]{stop if front $<$15\,cm} (motors);
+
+% Rejection arrows
+\node[right=2.5cm of validator, font=\tiny\itshape, text=red!70!black] (reject) {violation $\to$ stop};
+\draw[-{Stealth[length=2mm]}, dashed, red!60!black] (validator.east) -- (reject.west);
+\end{tikzpicture}
+\caption{Three-layer safety validation pipeline: specification-level grounding in the prompt, runtime enforcement on the Pi, and device-level emergency stop in ESP32 firmware.}
+\label{fig:safety_pipeline}
+\end{figure}
 
 %-------------------------------------------------------------------
 \section{System Architecture}
@@ -82,7 +120,7 @@ KANDA is structured as a \textbf{three-tier logical architecture}: intelligence 
 % Layer 1: Intelligence
 \node[layer, fill=blue!8] (intel) {
   \textbf{Intelligence layer (Raspberry Pi)}\\[3pt]
-  {\footnotesize Prompt builder \quad$\bullet$\quad Gemini client \quad$\bullet$\quad Safety validator \quad$\bullet$\quad UART bridge}
+  {\footnotesize Body context \quad$\bullet$\quad Groq/NVIDIA clients \quad$\bullet$\quad Safety validator \quad$\bullet$\quad UART bridge}
 };
 
 % UART link (narrow band)
@@ -127,7 +165,7 @@ KANDA is structured as a \textbf{three-tier logical architecture}: intelligence 
 \label{fig:sysarch}
 \end{figure}
 
-Fig.~\ref{fig:sysarch} shows how responsibilities are split. The \textit{intelligence layer} performs hardware-aware prompting, calls the Gemini API (default Gemini~2.5 Flash), validates JSON commands, and transmits safe motor intents over UART. The \textit{UART link} carries newline-terminated ASCII lines in both directions. The \textit{embodiment layer} parses commands, drives motors, samples ultrasonic sensors, refreshes the OLED, and enforces mode logic including fallback to AUTO\_MODE. The \textit{physical plant} captures sensors, actuators, and power paths documented in hardware chapters.
+Fig.~\ref{fig:sysarch} shows how responsibilities are split. The \textit{intelligence layer} performs hardware-aware prompting, calls Groq (text) and NVIDIA NIM (vision), validates JSON commands, and transmits safe motor intents over UART. The \textit{UART link} carries newline-terminated ASCII lines in both directions. The \textit{embodiment layer} parses commands, drives motors, samples ultrasonic sensors, refreshes the OLED, and enforces mode logic including fallback to AUTO\_MODE. The \textit{physical plant} captures sensors, actuators, and power paths documented in hardware chapters.
 
 %-------------------------------------------------------------------
 \section{Data Flow Diagrams}
@@ -154,7 +192,7 @@ The Level~0 DFD places KANDA at the centre of supervision, cloud inference, and 
 
 \node[process, fill=green!12, below=2cm of op] (sys) {\textbf{KANDA}\\{\footnotesize embodied agent}};
 
-\node[entity, fill=purple!10, below left=1.9cm and 2.5cm of sys] (gem) {\textbf{Gemini API}\\{\footnotesize (HTTPS)}};
+\node[entity, fill=purple!10, below left=1.9cm and 2.5cm of sys] (gem) {\textbf{Groq + NVIDIA NIM}\\{\footnotesize (HTTPS)}};
 
 \node[entity, fill=gray!15, below right=1.9cm and 2.5cm of sys] (env) {\textbf{Environment}\\{\footnotesize (workspace)}};
 
@@ -173,7 +211,7 @@ The Level~0 DFD places KANDA at the centre of supervision, cloud inference, and 
 \label{fig:dfd0}
 \end{figure}
 
-Fig.~\ref{fig:dfd0} abstracts KANDA as a single process. The \textit{operator} starts or stops runs and may adjust configuration while receiving status and logs. The system exchanges HTTPS messages with the \textit{Gemini API}: prompts ascend and structured completions descend. Interaction with the \textit{environment} captures that motion changes the scene layout---including obstacle distances reflected indirectly through onboard sensing inside the system boundary.
+Fig.~\ref{fig:dfd0} abstracts KANDA as a single process. The \textit{operator} starts or stops runs and may adjust configuration while receiving status and logs. The system exchanges HTTPS messages with \textit{Groq and NVIDIA NIM}: prompts ascend and structured completions descend. Interaction with the \textit{environment} captures that motion changes the scene layout---including obstacle distances reflected indirectly through onboard sensing inside the system boundary.
 
 %-------------------------------------------------------------------
 \subsection{Data Flow Diagram Level~1, Embodiment and Intelligence}
@@ -193,7 +231,7 @@ The Level~1 DFD decomposes KANDA into two cooperating sub-systems linked by the 
   node distance=0.32cm
 ]
 
-\node[entity] (gem) {\textbf{Gemini API}};
+\node[entity] (gem) {\textbf{Groq + NVIDIA NIM}};
 
 % UART channel (centre spine)
 \node[chan, below=1cm of gem] (uart) {\textbf{UART}\\[4pt]{\scriptsize duplex}};
@@ -209,11 +247,11 @@ The Level~1 DFD decomposes KANDA into two cooperating sub-systems linked by the 
 \node[process, fill=blue!12, font=\small\bfseries, right=2.15cm of uart, anchor=west, minimum width=5.5cm] (i0) {Intelligence (Raspberry Pi)};
 \node[process, fill=blue!6, below=0.2cm of i0, font=\scriptsize, minimum width=5.5cm] (i1) {2.1 Read telemetry};
 \node[process, fill=blue!6, below=0.12cm of i1, font=\scriptsize, minimum width=5.5cm] (i2) {2.2 Build hardware-aware prompt};
-\node[process, fill=blue!6, below=0.12cm of i2, font=\scriptsize, minimum width=5.5cm] (i3) {2.3 Invoke Gemini};
+\node[process, fill=blue!6, below=0.12cm of i2, font=\scriptsize, minimum width=5.5cm] (i3) {2.3 Invoke Groq/NIM};
 \node[process, fill=blue!6, below=0.12cm of i3, font=\scriptsize, minimum width=5.5cm] (i4) {2.4 Validate JSON command};
 \node[process, fill=blue!6, below=0.12cm of i4, font=\scriptsize, minimum width=5.5cm] (i5) {2.5 Transmit validated command};
 
-% Gemini to intelligence (HTTPS inference)
+% Cloud APIs to intelligence (HTTPS inference)
 \draw[arr] (gem.south) -- +(0,-0.35) -| node[lbl, pos=0.28, above] {HTTPS} (i3.north);
 
 % Telemetry uplink: embodiment -> uart -> intelligence
@@ -232,7 +270,7 @@ The Level~1 DFD decomposes KANDA into two cooperating sub-systems linked by the 
 \label{fig:dfd1}
 \end{figure}
 
-Fig.~\ref{fig:dfd1} separates real-time embodiment (left) from asynchronous intelligence (right). Telemetry formatted on the ESP32 flows upward to the Raspberry Pi; validated JSON commands flow downward after prompt construction, Gemini inference, and validation. HTTPS exchanges with the Gemini API attach to the intelligence column (expanded at Level~2).
+Fig.~\ref{fig:dfd1} separates real-time embodiment (left) from asynchronous intelligence (right). Telemetry formatted on the ESP32 flows upward to the Raspberry Pi; validated JSON commands flow downward after prompt construction, cloud inference, and validation. HTTPS exchanges with Groq and NVIDIA NIM attach to the intelligence column (expanded at Level~2).
 
 %-------------------------------------------------------------------
 \subsection{Data Flow Diagram Level~2, Intelligence Pipeline}
@@ -251,15 +289,15 @@ Fig.~\ref{fig:dfd1} separates real-time embodiment (left) from asynchronous inte
 
 \node[ext] (uartin) {\textbf{UART} {\scriptsize (telemetry in)}};
 
-\node[proc, below=of uartin] (p1) {\textbf{2.1 Read telemetry} --- parse distances and state from ASCII line};
+\node[proc, below=of uartin] (p1) {\textbf{2.1 Read telemetry} (parse distances and state from ASCII line)};
 
-\node[proc, below=of p1] (p2) {\textbf{2.2 Build prompt} --- inject ranges, legal actions, speed bounds, rules};
+\node[proc, below=of p1] (p2) {\textbf{2.2 Build prompt} (inject ranges, legal actions, speed bounds, rules)};
 
-\node[proc, below=of p2] (p3) {\textbf{2.3 Invoke Gemini} --- low temperature, bounded output tokens};
+\node[proc, below=of p2] (p3) {\textbf{2.3 Invoke Groq/NVIDIA} (low temperature, bounded output tokens)};
 
-\node[ext, below=of p3] (gem) {\textbf{Gemini API}};
+\node[ext, below=of p3] (gem) {\textbf{Groq / NVIDIA NIM APIs}};
 
-\node[proc, below=of gem] (p4) {\textbf{2.4 Validate} --- schema, whitelist, clamp speed, safe stop on fault};
+\node[proc, below=of gem] (p4) {\textbf{2.4 Validate} (schema, whitelist, clamp speed, safe stop on fault)};
 
 \node[ext, below=of p4] (uartout) {\textbf{UART} {\scriptsize (JSON command out)}};
 
@@ -276,7 +314,7 @@ Fig.~\ref{fig:dfd1} separates real-time embodiment (left) from asynchronous inte
 \label{fig:dfd2a}
 \end{figure}
 
-Fig.~\ref{fig:dfd2a} details the Pi-side pipeline implemented by \path|main.py| and companion modules: telemetry ingestion, hardware-aware prompt construction, Gemini invocation (default model \texttt{gemini-2.5-flash}), validation, and transmission of a single safe JSON line per cycle.
+Fig.~\ref{fig:dfd2a} details the Pi-side pipeline implemented by \path|vision_module/main.py| and companion modules: telemetry ingestion, hardware-aware prompt construction, Groq/NVIDIA invocation, validation, and transmission of a single safe JSON line per cycle.
 
 %-------------------------------------------------------------------
 \subsection{Data Flow Diagram Level~2, Embodiment Pipeline}
@@ -295,17 +333,17 @@ Fig.~\ref{fig:dfd2a} details the Pi-side pipeline implemented by \path|main.py| 
 
 \node[ext] (sns) {\textbf{Sensors} {\scriptsize (HC-SR04)}};
 
-\node[proc, below=of sns] (p1) {\textbf{1.1 Trigger \& capture echoes} --- compute distances (cm)};
+\node[proc, below=of sns] (p1) {\textbf{1.1 Trigger and capture echoes} (compute distances in cm)};
 
-\node[proc, below=of p1] (p2) {\textbf{1.2 Compose telemetry} --- ASCII line to companion};
+\node[proc, below=of p1] (p2) {\textbf{1.2 Compose telemetry} (ASCII line to companion)};
 
 \node[ext, below=of p2] (uartup) {\textbf{UART TX} {\scriptsize (to Pi)}};
 
 \node[ext, below=0.45cm of uartup] (uartdn) {\textbf{UART RX} {\scriptsize (from Pi)}};
 
-\node[proc, below=of uartdn] (p3) {\textbf{1.3 Parse JSON command} --- ArduinoJson / line parser};
+\node[proc, below=of uartdn] (p3) {\textbf{1.3 Parse JSON command} (ArduinoJson parser)};
 
-\node[proc, below=of p3] (p4) {\textbf{1.4 Map action to motor primitives} --- PWM + direction pins};
+\node[proc, below=of p3] (p4) {\textbf{1.4 Map action to motor primitives} (PWM and direction pins)};
 
 \node[ext, below=of p4] (mot) {\textbf{Motors \& OLED}};
 

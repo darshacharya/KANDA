@@ -5,7 +5,7 @@
 \chapter{Theory and Concepts}
 \label{ch:theory}
 
-This chapter presents the theoretical foundations and core concepts underlying \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)}. It covers embodied artificial intelligence, the use of Large Language Models (LLMs) for grounded robot control, the sense--reason--act architecture, proximal sensing with ultrasonic rangefinders, PWM-based motor actuation, UART serial communication between processors, and safety validation before physical execution. Each topic is tied to the literature where applicable and collectively justifies the architectural choices made in the implementation.
+This chapter presents the theoretical foundations and core concepts that guide KANDA. Rather than presenting theory in isolation, we explain each idea in the context of why we needed it. We cover embodied artificial intelligence---the idea that thinking robots need bodies. We discuss Large Language Models for robot control and the specific problem of grounding: getting a language model to understand what a robot can actually do. We explain the sense--reason--act loop and why timing matters. Finally, we cover the specific hardware and communication technologies we chose. By the end of this chapter, you should understand not just what KANDA does, but why we made the design choices we did.
 
 %-------------------------------------------------------------------
 \section{Embodied Artificial Intelligence}
@@ -53,15 +53,11 @@ Grounded decoding~\cite{huang2023grounded} combines language-model probabilities
 \section{Sense--Reason--Act Architecture}
 \label{sec:sra}
 
-The classical \textbf{sense--reason--act} loop underlies most autonomous robots: sense the world, decide an action, execute it, repeat~\cite{brooks1986robust}. In KANDA:
+The classical \textbf{sense--reason--act} loop underlies most autonomous robots: observe the environment, make a decision, carry it out, and repeat. In KANDA, each step runs on a different processor at a different timescale, and this mismatch forced us to rethink how they should talk to each other.
 
-\begin{itemize}[nosep]
-  \item \textbf{Sense:} ESP32 samples HC-SR04 ultrasonic sensors and publishes distances.
-  \item \textbf{Reason:} Raspberry Pi builds a prompt, queries Gemini 2.5 Flash, obtains a JSON motion command.
-  \item \textbf{Act:} Validated command drives PWM outputs via the TB6612FNG to the motors.
-\end{itemize}
+On the \textbf{ESP32}, we sample three HC-SR04 ultrasonic sensors and measure distances to obstacles at 10\,Hz. On the \textbf{Raspberry Pi}, we build a hardware-description prompt that tells Gemini (the Google language model) what the robot can do, and we get back a JSON motion command. Then we validate that command before sending it back to the ESP32 to drive the motors.
 
-When the reasoning layer is unavailable (API failure, timeout, or serial loss), the firmware reverts to autonomous rule-based avoidance---\textbf{graceful degradation} preserving safety while sacrificing LLM-mediated flexibility.
+The tricky part: Gemini takes 1.5--4 seconds per call, but obstacles can appear in under 100 milliseconds. We cannot put both timescales in the same loop. So when the reasoning layer is unavailable (API timeout, network failure, or any error), the firmware falls back to autonomous rule-based obstacle avoidance. This is what we call graceful degradation---the robot is slower and less intelligent without the cloud, but it stays safe.
 
 %-------------------------------------------------------------------
 \section{Proximate Sensing with Ultrasonic Rangefinders}

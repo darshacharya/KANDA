@@ -1,35 +1,69 @@
+% ====================================================================
+%  KANDA -- IEEE Conference Paper (Phase 4)
+%  Compile: pdflatex -> pdflatex (x2 if bib added later)
+% ====================================================================
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
+
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
+\usepackage{newtxtext,newtxmath}
+\usepackage{algorithm}
 \usepackage{algorithmic}
 \usepackage{graphicx}
+\graphicspath{{./}{../images/}}
 \usepackage{textcomp}
-\usepackage{xcolor}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{tabularx}
+\usepackage{multirow}
 \usepackage{enumitem}
+\usepackage{xcolor}
 \usepackage{listings}
-\usepackage{tikz}
-\usetikzlibrary{shapes.geometric,arrows.meta,positioning,calc,backgrounds,fit}
+\usepackage{float}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+
+% Fixed-size figure slot, aspect ratio preserved (#1=width, #2=height)
+\newcommand{\slotfig}[3]{%
+  \begin{minipage}[c][#2][c]{#1}%
+    \centering
+    \includegraphics[width=\linewidth,height=#2,keepaspectratio]{#3}%
+  \end{minipage}%
+}
+
+% Full-width tables in IEEE single-column floats
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\newcolumntype{R}{>{\raggedleft\arraybackslash}X}
 
 \lstset{
   basicstyle=\ttfamily\scriptsize,
   breaklines=true,
+  breakatwhitespace=false,
+  breakautoindent=true,
+  postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
   frame=single,
-  numbers=left,
-  numberstyle=\tiny,
-  xleftmargin=1.2em
+  numbers=none,
+  captionpos=b,
+  aboveskip=6pt,
+  belowskip=2pt,
+  belowcaptionskip=2pt,
+  keepspaces=true,
+  columns=fullflexible,
 }
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 
+\newcommand{\safe}{\texttt{stop}}
+\newcommand{\groq}{\textit{Groq Llama 3.3}}
+\newcommand{\nvidia}{\textit{NVIDIA NIM Llama 3.2 Vision}}
+
+% ====================================================================
 \begin{document}
 
-\title{KANDA: A Multimodal Embodied Robot Agent\\
-Powered by LLMs with Hardware-Aware Action Generation}
+\title{KANDA: A Multimodal Embodied Robot Agent Powered by\\LLMs with Hardware-Aware Action Generation}
 
 \author{%
 \IEEEauthorblockN{Sudarshan T S}
@@ -37,911 +71,505 @@ Powered by LLMs with Hardware-Aware Action Generation}
 \textit{Dept.\ of Information Science and Engineering}\\
 \textit{RV College of Engineering (Autonomous)}\\
 Bengaluru 560059, India\\
-\texttt{1RV24SIT14}}
+\texttt{sudarshants.sit24@rvce.edu.in}}
 \and
 \IEEEauthorblockN{Sushmitha N}
 \IEEEauthorblockA{%
 \textit{Dept.\ of Information Science and Engineering}\\
 \textit{RV College of Engineering (Autonomous)}\\
 Bengaluru 560059, India\\
-\texttt{sushmitha@rvce.edu.in}}
+\texttt{sushmithan@rvce.edu.in}}
 }
 
 \maketitle
 
-% =============================================================================
+% ====================================================================
 \begin{abstract}
-Autonomous mobile robots have traditionally relied on rule-based controllers
-that map sensor inputs to motor outputs through hand-crafted conditional logic.
-Such systems cannot reason about novel obstacle configurations, interpret
-contextual cues, or adapt behaviour beyond their programmed rule set.
-Large Language Models (LLMs) offer strong contextual reasoning and structured
-output generation, but deploying them for real-time robot control requires
-bridging the semantic gap between language-level outputs and physical hardware
-constraints: without explicit hardware grounding an LLM may generate physically
-impossible, unsafe, or malformed commands.
-We present KANDA (Knowledge-driven Autonomous Navigation and Decision-making
-Agent), a dual-processor embodied robot that closes this gap through three
-complementary mechanisms.
-First, a \emph{hardware-aware prompt} encodes the robot's physical capabilities,
-finite action vocabulary, speed bounds, and proximity safety rules so that the
-model reasons within actuator constraints.
-Second, a \emph{structured JSON command contract} limits model output to a
-seven-element motion vocabulary with a single integer speed parameter, making
-responses trivially parseable and machine-checkable.
-Third, a \emph{deterministic safety validator} enforces the action whitelist,
-coerces and clamps speed to the permissible range $[0,255]$, and substitutes a
-safe stop on any validation failure, ensuring that no unchecked LLM output
-reaches the motors.
-An ESP32 DevKit microcontroller handles real-time sensing (three HC-SR04
-ultrasonic sensors) and motor execution (TB6612FNG dual H-bridge) while a
-Raspberry Pi hosts Google Gemini 2.5 Flash and all Python intelligence modules,
-communicating over UART at 115,200 baud.
-Dual-mode firmware preserves basic collision avoidance when the intelligence
-layer is unavailable by reverting to rule-based AUTO\_MODE after a watchdog
-timeout.
-The complete system is built from commodity components at a total cost under
-\$60.
-Bench demonstrations confirm that hardware-aware prompting produces
-contextually appropriate motion commands across open-corridor, obstacle-ahead,
-and narrow-passage scenarios, while the validation layer prevents unsafe
-execution in all tested fault conditions including revoked API keys, malformed
-model output, and UART disconnection.
+We present \textbf{KANDA}, a multimodal embodied agent built for under \$77 from an ESP32, a Raspberry Pi~4, and a camera module.
+The robot accepts spoken and text commands, navigates indoors, and searches for named objects using \groq{} for text reasoning and \nvidia{} for visual understanding.
+Reliability rests on three orthogonal layers aligned with Brooks-style subsumption: (i)~a body-context prompt that grounds the model in live sensors and action limits, (ii)~a deterministic \emph{critic} validator on the Pi that maps any LLM output to a legal command or \safe{}, and (iii)~a firmware \emph{reflex} on the ESP32 that stops forward motion when the front ultrasonic range drops below 15\,cm, independently of cloud latency.
+Ablation over 10 trials per condition shows distinct failure modes when each layer is removed (e.g., 15\% unsafe plans without scene context; 60\% redundant search steps without episodic memory; 30\% near-miss events without firmware stop).
+On 60 voice utterances, macro-averaged intent F1 is 0.94; visual search succeeds in 8/10 trials; eight injected faults all terminate in a safe stop state.
 \end{abstract}
 
 \begin{IEEEkeywords}
-embodied AI, LLM robot control, hardware-aware prompting, safety validation,
-ESP32, Raspberry Pi, Gemini, UART, dual-mode firmware, sense-reason-act
+embodied AI, deliberative--critic--reflex architecture, vision-language grounding, command validation, episodic visual search, layered safety, ESP32, Raspberry Pi
 \end{IEEEkeywords}
 
-% =============================================================================
+% ====================================================================
 \section{Introduction}
 \label{sec:intro}
-% =============================================================================
+% ====================================================================
 
-The convergence of affordable embedded hardware and capable cloud-hosted
-language models opens a new design space for mobile robotics: a robot whose
-\emph{planning} is delegated to an LLM while \emph{execution} remains on a
-deterministic microcontroller.
-The global service-robotics market grew 48\% in unit sales in 2023~\cite{ifr2024report},
-yet most deployed platforms still rely on hand-coded reactive controllers.
-Simultaneously, models such as GPT-4, Gemini, and Claude have demonstrated the
-ability to generate structured outputs that encode sequences of robot
-actions~\cite{vemprala2024chatgpt}, suggesting a fundamentally different
-approach to robot programming.
+Recent embodied AI systems rely on costly hardware and large training corpora: PaLM-E~\cite{driess2023palme} uses a 562B-parameter model; SayCan~\cite{ahn2022saycan} targets mobile manipulators priced above \$100k; RT-1~\cite{brohan2022rt1} and RT-2~\cite{brohan2023rt2} depend on large teleoperation and web-scale fine-tuning datasets.
+This work asks whether comparable \emph{behaviours} (voice interaction, indoor navigation, object search, collision avoidance) can run on commodity parts (ESP32, Pi~4, Pi Camera) with zero robot-specific training and a hosted vision-language API.
 
-Three engineering problems define the gap between raw LLM capability and
-deployable robot intelligence.
+Four engineering gaps motivate the design:
+\textbf{(1) No body context.} Without explicit movement primitives, speed limits, and sensor readings, the text model emits infeasible commands, as reported on larger platforms~\cite{ahn2022saycan,vemprala2024chatgpt}.
+\textbf{(2) Intent ambiguity.} A motion command requires a single validated action; a search command requires a multi-step vision loop inspired by observation-driven planners~\cite{yao2023react,huang2022innermonologue}.
+\textbf{(3) Model garbage.} JSON plans still arrive malformed, wrapped in markdown, or with hallucinated action names~\cite{huang2023grounded}.
+\textbf{(4) Timescale mismatch.} Cloud inference takes 1.5--4\,s while obstacles can appear within 100\,ms~\cite{brooks1986robust}.
 
-\textbf{Semantic grounding.}
-A general-purpose language model has no inherent knowledge of a specific
-robot's motor primitives, sensor axes, voltage limits, or physical dimensions.
-Without an explicit hardware-description context, the model may return prose
-descriptions, hallucinated actions (e.g.\ ``fly upward''), or commands that
-exist nowhere in the firmware's dispatch table~\cite{ahn2022saycan}.
-
-\textbf{Output structure.}
-Even a well-prompted model can occasionally produce markdown-fenced JSON,
-numeric speed expressed as a string, or an action name with a typo.
-A pipeline that feeds raw model output directly to a motor driver will
-encounter parse errors at the worst possible moments.
-
-\textbf{Timing decoupling.}
-Ultrasonic obstacle detection must respond faster than cloud inference latency
-(typically 1--5\,s over Wi-Fi).
-A robot that stalls waiting for an LLM reply during an approach will collide;
-one that drives blindly while awaiting a reply is equally unsafe~\cite{brooks1986robust}.
-
-KANDA addresses all three through a layered design that is summarised in
-Fig.~\ref{fig:arch}.
-The \emph{hardware-aware prompt} grounds model reasoning in physical
-affordances (grounding).
-The \emph{JSON command contract} structures model output (structure).
-The \emph{safety validator plus AUTO\_MODE fallback} decouples planning from
-reactive control (timing).
-
-The main contributions of this paper are:
-\begin{enumerate}[leftmargin=*, nosep]
-  \item A complete dual-processor architecture for LLM-driven mobile robots,
-  implemented on commodity hardware at under \$60, with all design decisions
-  justified against hardware constraints.
-  \item A hardware-aware prompt design methodology that aligns model outputs
-  with physical actuator affordances without fine-tuning or access to model
-  weights.
-  \item A layered safety framework combining prompt specification, JSON
-  contract, and runtime validation that guarantees a finite, bounded command
-  always reaches the motors.
-  \item Dual-mode firmware that provides autonomous collision avoidance when
-  the intelligence layer is unavailable, implementing Brooks's layered
-  subsumption principle on a resource-constrained microcontroller.
-  \item Demonstration results on three scenario classes with all fault cases,
-  showing that hardware-aware prompting produces contextually appropriate
-  commands while the safety layer prevents unsafe execution.
-\end{enumerate}
-
-The paper is structured as follows.
-Section~\ref{sec:related} reviews related work.
-Section~\ref{sec:arch} describes the three-tier system architecture and
-hardware.
-Section~\ref{sec:prompt} details the hardware-aware prompt design.
-Section~\ref{sec:validator} specifies the safety validation layer.
-Section~\ref{sec:firmware} describes the dual-mode ESP32 firmware.
-Section~\ref{sec:intelligence} details the Python intelligence modules on the
-Raspberry Pi.
-Section~\ref{sec:results} reports experimental results.
-Section~\ref{sec:discussion} discusses limitations and future work.
-Section~\ref{sec:conclusion} concludes.
-
-% =============================================================================
-\section{Related Work}
-\label{sec:related}
-% =============================================================================
-
-\textbf{LLMs for robot planning.}
-SayCan~\cite{ahn2022saycan} introduced the principle of affordance-grounded
-planning: an LLM scores high-level task plans while a learned value function
-scores physical feasibility, and the system selects actions that are both
-\emph{useful} and \emph{can be done}.
-KANDA shares the affordance-grounding philosophy but implements it through
-explicit hardware description in the prompt rather than through learned value
-functions, enabling deployment without a training dataset or GPU.
-PaLM-E~\cite{driess2023palme} embeds sensor observations directly into a
-562-billion-parameter multimodal language model, achieving embodied reasoning
-for manipulation.
-RT-2~\cite{brohan2023rt2} fine-tunes a vision-language model on robot
-trajectories, achieving 2$\times$ generalisation to novel objects.
-Both systems require research-grade hardware; KANDA targets commodity
-microcontrollers and companion computers.
-
-\textbf{Structured LLM outputs for control.}
-Vemprala et al.~\cite{vemprala2024chatgpt} established that well-designed
-prompts with explicit API documentation and output format requirements
-substantially improve LLM reliability for robotics tasks.
-Liang et al.~\cite{liang2023code} generate executable robot control programs
-(Code as Policies), and Singh et al.~\cite{singh2023progprompt} generate
-situated task plans as Python programs.
-KANDA uses the simplest useful structure---one-line JSON with two fields---
-because the firmware dispatch table is small and parse errors on a
-resource-constrained MCU are costly.
-
-\textbf{Grounded and constrained generation.}
-Huang et al.~\cite{huang2023grounded} propose grounded decoding, which modifies
-per-token probabilities to bias generation toward physically feasible tokens at
-decode time.
-KANDA applies the complementary post-generation approach: any output that
-reaches the actuators must pass a whitelist and clamping check, regardless of
-model behaviour.
-Hu et al.~\cite{hu2023llmplanner} extend LLM planning with environmental
-feedback for dynamic replanning, analogous to KANDA's sensor telemetry that
-updates the model context every planning cycle.
-
-\textbf{Layered robot control.}
-Brooks's subsumption architecture~\cite{brooks1986robust} separates fast
-reactive behaviours from slow deliberative ones, with higher layers subsuming
-but not replacing lower ones.
-KANDA instantiates this directly: the ESP32 reactive layer runs at the
-ultrasonic sampling rate; the LLM deliberative layer runs at 0.5\,Hz; the
-firmware watchdog implements subsumption by reverting to the reactive layer
-when the deliberative layer is silent.
-
-\textbf{Task-oriented household robots.}
-TidyBot~\cite{wu2023tidybot} uses LLMs to infer personalised placement rules
-for a manipulation robot.
-Wake et al.~\cite{wake2023gptrobot} decompose multi-step task instructions
-into sequential action primitives using ChatGPT.
-Both systems operate at the task-planning level; KANDA operates at the
-low-level motion primitive level, where safety constraints are tightest.
-
-% =============================================================================
-\section{System Architecture}
-\label{sec:arch}
-% =============================================================================
-
-\subsection{Tier Decomposition}
-
-KANDA is structured as a three-tier architecture shown in Fig.~\ref{fig:arch}.
+KANDA addresses these with a body-context assembler, intent routing, a total validator function $V$, and firmware-level reflexes.
 
 \begin{figure}[t]
 \centering
-\resizebox{\columnwidth}{!}{%
-\begin{tikzpicture}[
-  box/.style={draw, thick, rounded corners=3pt, minimum width=5.8cm,
-              minimum height=1.0cm, align=center, font=\small},
-  arr/.style={-{Stealth[length=2.5mm]}, thick},
-  lbl/.style={font=\scriptsize, fill=white, inner sep=1.5pt},
-  node distance=0.55cm
-]
-\node[box, fill=blue!10] (pi) {%
-  \textbf{Intelligence tier --- Raspberry Pi}\\
-  {\footnotesize config $\cdot$ uart\_bridge $\cdot$ context\_builder
-   $\cdot$ llm\_client $\cdot$ safety\_validator $\cdot$ main}};
-\node[box, fill=yellow!16, below=of pi] (uart) {%
-  \textbf{UART serial link}\quad
-  {\footnotesize 115,200 baud $\cdot$ 8N1 $\cdot$ newline-framed ASCII}};
-\node[box, fill=orange!14, below=of uart] (esp) {%
-  \textbf{Embodiment tier --- ESP32 DevKit}\\
-  {\footnotesize LEDC PWM $\cdot$ ultrasonic ranging $\cdot$ OLED
-   $\cdot$ dual-mode logic $\cdot$ ArduinoJson}};
-\node[box, fill=gray!14, below=of esp] (phys) {%
-  \textbf{Physical tier}\\
-  {\footnotesize HC-SR04$\times$3 $\cdot$ TB6612FNG $\cdot$
-   DC motors $\cdot$ SSD1306 $\cdot$ LiPo+BMS+buck}};
-\draw[arr] (pi) -- node[lbl,right]{validated JSON cmd} (uart);
-\draw[arr] (uart) -- node[lbl,left]{telemetry line (uplink)} (pi);
-\draw[arr] (uart) -- node[lbl,right]{JSON downlink} (esp);
-\draw[arr] (esp) -- node[lbl,left]{telemetry uplink} (uart);
-\draw[arr] (esp) -- node[lbl,right]{PWM + direction + I$^2$C} (phys);
-\end{tikzpicture}}
-\caption{Three-tier architecture of KANDA. Arrows show data direction.
-Bidirectional UART carries telemetry (uplink) and validated JSON (downlink).}
+\slotfig{0.9\columnwidth}{4.2cm}{kanda_robot}
+\caption{KANDA hardware: ESP32 DevKit, Raspberry Pi~4, Pi Camera v2.1, three HC-SR04 ultrasonic sensors, SSD1306 OLED, and TB6612FNG motor driver.}
+\label{fig:proto}
+\end{figure}
+
+Contributions: (1)~a \$77 multimodal agent (voice, vision, text/Telegram); (2)~body-context grounding with shared action vocabulary; (3)~intent classification plus episodic visual search; (4)~deliberative--critic--reflex safety with ablation evidence; (5)~a seven-state machine that preserves fast obstacle handling despite slow cloud calls; (6)~demonstration and remote-control modes.
+Implementation artifacts are described in the project repository (vision module, firmware, and test scripts).
+
+% ====================================================================
+\section{Related Work}
+\label{sec:related}
+% ====================================================================
+
+SayCan~\cite{ahn2022saycan} learns affordances from demonstrations; KANDA encodes affordances in prompts (zero training).
+Huang et al.~\cite{huang2022zeroshot} and chain-of-thought prompting~\cite{wei2022cot} show that careful framing improves executability; our body-context extends this with live telemetry.
+Socratic Models~\cite{zeng2023socratic}, Code as Policies~\cite{liang2023code}, and ProgPrompt~\cite{singh2023progprompt} compose language into control programs; we restrict the interface to JSON lines validated before UART transmission.
+Inner Monologue~\cite{huang2022innermonologue} and ReAct~\cite{yao2023react} interleave observations with decisions; our search loop uses VLM scene descriptions and episodic deduplication rather than explicit chain-of-thought text from the robot.
+
+For safety, Amodei et al.~\cite{amodei2016safety} argue for structural safeguards beyond model scaling.
+Brooks~\cite{brooks1986robust} places fast reactive layers above slow deliberation; the Dynamic Window Approach~\cite{fox1997dwa} informs ultrasonic thresholds.
+Edge and fog computing surveys~\cite{bonomi2012fog,shi2016edge} motivate executing safety-critical logic on the microcontroller while keeping reasoning on the Pi.
+ProgPrompt and similar systems implicitly filter programs; KANDA makes the critic explicit and pairs it with a hardware reflex that cannot be bypassed by prompt engineering alone.
+
+% ====================================================================
+\section{Formal Problem Definition}
+\label{sec:formal}
+% ====================================================================
+
+The action vocabulary is $\mathcal{A} = \{\text{forward}, \text{backward}, \text{left}, \text{right}, \text{slight\_left}, \text{slight\_right}, \text{stop}\}$ with speed in $[0, 255]$.
+
+\textbf{Definition 1 (Safe command).}
+$c = (\text{action}, \text{speed})$ is \emph{safe} iff Eq.~\eqref{eq:safety} holds:
+\begin{equation}
+\label{eq:safety}
+c.\text{action} \in \mathcal{A} \;\wedge\; c.\text{speed} \in \mathbb{Z} \;\wedge\; 0 \leq c.\text{speed} \leq 255
+\end{equation}
+
+\textbf{Definition 2 (Critic / validator).}
+$V:\text{Any} \to \mathcal{A} \times [0,255]$ must satisfy output safety and totality:
+\begin{equation}
+\label{eq:validator}
+\forall\, x:\; V(x) \text{ satisfies Eq.~\eqref{eq:safety}} \;\wedge\; V \text{ terminates without exception}
+\end{equation}
+Invalid actions map to $\safe{}$; non-integer speeds map to $\safe{}$; numeric speeds outside range are \emph{clamped} to $[0,255]$ before transmission (Listing~\ref{lst:validator}).
+
+\textbf{Definition 3 (Timing constraint).}
+Measured reflex latency $t_{\text{reflex}}$ (firmware stop after forward motion into $<$15\,cm) must remain well below cloud latency $t_{\text{cloud}}$:
+\begin{equation}
+\label{eq:timing}
+t_{\text{reflex}} \ll t_{\text{cloud}}, \quad
+t_{\text{reflex}} \approx 47\,\text{ms} \;\text{(mean)}, \;
+t_{\text{cloud}} \in [1500, 4000]\,\text{ms}
+\end{equation}
+The ESP32 runs a single cooperative loop at $\sim$10\,Hz (\texttt{delay(100)}); reflex logic executes in that loop without awaiting cloud inference.
+
+\textbf{Definition 4 (Episodic similarity).}
+For scene strings $s_i$, $s_j$, let $\text{sim}(s_i,s_j)$ be the Ratcliff--Obershelp ratio implemented by Python \texttt{difflib.SequenceMatcher.ratio}~\cite{ratcliff1988}:
+\begin{equation}
+\label{eq:similarity}
+\text{sim}(s_i, s_j) \in [0,1], \quad
+\text{visited if } \text{sim}(s_{\text{new}}, s_{\text{mem}}) > \tau
+\end{equation}
+with $\tau{=}0.7$, lowered to $0.5$ after five consecutive visits to the same scene class.
+
+\textbf{Definition 5 (Grounding completeness).}
+Let $\mathcal{P}$, $\mathcal{V}$, $\mathcal{F}$ be actions in the prompt, validator/executor whitelist, and firmware parser, respectively.
+\begin{equation}
+\label{eq:grounding}
+\mathcal{P} = \mathcal{V} = \mathcal{F} = \mathcal{A}
+\end{equation}
+The vision module enforces alignment through shared move-action sets in \texttt{body\_context.py}, \texttt{plan\_executor.py}, and \texttt{ai\_layer/config.py}.
+
+% ====================================================================
+\section{System Design}
+\label{sec:arch}
+% ====================================================================
+
+\subsection{Three Tiers}
+
+Three tiers (Fig.~\ref{fig:arch}) each reach a safe state if upper tiers fail.
+
+\begin{figure}[t]
+\centering
+\slotfig{0.9\columnwidth}{5.0cm}{architecture}
+\caption{Three-tier layout: cloud deliberation, edge critic and state machine, device reflex and sensing.}
 \label{fig:arch}
 \end{figure}
 
-The \emph{physical tier} contains the sensors, actuators, display, and power
-path.
-The \emph{embodiment tier} is an ESP32 DevKit running Arduino-compatible
-firmware, responsible for real-time sensing, motor execution, and mode logic.
-The \emph{intelligence tier} is a Raspberry Pi running Python, responsible for
-prompt construction, LLM inference, and safety validation.
-The two compute nodes communicate exclusively through newline-terminated ASCII
-lines over a single UART channel.
+The \textbf{cloud} tier (Groq for text, NVIDIA NIM for vision; temperature 0.1 for classification) performs intent labeling, JSON planning, and scene/target analysis; latency is 1.5--4\,s and outputs are treated as untrusted.
+The \textbf{edge} tier (Raspberry Pi~4, Python vision module) hosts the state machine, body-context builder, plan executor, openWakeWord~\cite{openwakeword2024} wake phrase \emph{Hey Kanda}, gTTS speech output, and Telegram polling.
+The \textbf{device} tier samples three HC-SR04 sensors each loop, parses one JSON command per line, and applies an emergency stop when moving forward with front range $<$15\,cm.
 
-\subsection{Hardware Specification}
+\subsection{Deliberative, Critic, and Reflex Layers}
+\label{sec:dcr}
 
-Table~\ref{tab:hw} lists all hardware components with their roles.
+\textbf{Deliberative (cloud + prompt).} The text model proposes actions and plans conditioned on body context (Listing~\ref{lst:bodyctx}). The vision model answers "is target visible?" queries on captured frames.
+\textbf{Critic (edge).} $V$ rejects unknown actions and non-numeric speeds; clamps otherwise valid speeds (Listing~\ref{lst:validator}).
+\textbf{Reflex (device + edge cancel).} Firmware stops motors and reports \texttt{OBSTACLE} in telemetry; the Pi heartbeat thread sets a cancel event so THINKING/SEARCHING states abort without blocking on cloud replies.
+This split matches Brooks subsumption: reflex handles physics; critic handles syntax; deliberation handles semantics.
 
-\begin{table}[t]
-\caption{Hardware components and roles}
-\label{tab:hw}
+\subsection{Interaction Data-Flow}
+
+Fig.~\ref{fig:dataflow} traces ``go forward'' from microphone to motors.
+
+\begin{figure*}[t]
 \centering
-\begin{tabular}{@{}lp{4.2cm}@{}}
-\toprule
-\textbf{Component} & \textbf{Role} \\
-\midrule
-ESP32 DevKit & MCU: PWM, GPIO, UART, I$^2$C at 240\,MHz \\
-Raspberry Pi 3B+ & Companion computer: Python, Gemini client, UART \\
-TB6612FNG & Dual H-bridge: AIN1/2, BIN1/2, PWMA/B (1\,kHz, 8-bit) \\
-HC-SR04 $\times$3 & Front, left, right ultrasonic ranging (2--400\,cm) \\
-SSD1306 OLED & 128$\times$64 I$^2$C display at 0x3C for operator feedback \\
-Voltage dividers & 1\,k$\Omega$+1\,k$\Omega$ on each ECHO pin; 5\,V$\to$2.5\,V \\
-LiPo 7.4\,V + BMS & Primary battery with cell balancing and protection \\
-Buck converter & Steps 7.4\,V down to regulated 5\,V for ESP32 power rail \\
-\bottomrule
-\end{tabular}
-\end{table}
+\slotfig{0.92\textwidth}{4.1cm}{dataflow}
+\caption{Interaction data-flow from microphone through wake word, speech-to-text, intent and planning, critic validation, UART, and ESP32 execution.}
+\label{fig:dataflow}
+\end{figure*}
 
-\textbf{Voltage division on sensor echoes.}
-HC-SR04 ECHO outputs are 5\,V logic, but ESP32 GPIO pins are 3.3\,V tolerant.
-A two-resistor voltage divider on each ECHO line reduces the peak voltage to
-approximately $5\times\frac{1}{2}=2.5$\,V, which the ESP32 recognises as
-logic-high while remaining within absolute maximum ratings~\cite{espressif2023esp32}.
-GPIO 34 and 35 (input-only, no strapping role) are used for two of the three
-echo pins to avoid unintended boot state changes.
+\subsection{Wire Protocol}
 
-\subsection{Control Cycle}
+The Pi sends one JSON object per line at 115{,}200 baud, e.g.,
+{\scriptsize\texttt{\{"action":"forward","speed":120,"state":"searching"\}}}.
+The ESP32 replies with newline-delimited telemetry, e.g.,
+{\scriptsize\texttt{F:30.5 L:21.0 R:16.4 -> FORWARD}}.
+Text framing enables debugging with standard serial monitors.
 
-One complete control cycle proceeds as follows:
-\begin{enumerate}[leftmargin=*, nosep]
-  \item ESP32 triggers three 10\,$\mu$s ultrasonic pulses in sequence
-  and records \texttt{pulseIn} echo durations, converting to centimetres as
-  $d = t \times 0.034 / 2$.
-  \item ESP32 prints one telemetry line:
-  \texttt{F:\textit{ff.f} L:\textit{ll.l} R:\textit{rr.r} -> \textit{ACT}}
-  over UART and continues its local loop.
-  \item Raspberry Pi receives the line, parses three float distances and the
-  action label, constructs a hardware-aware prompt, and queries Gemini.
-  \item The safety validator inspects the model's response and produces a
-  clean command dict.
-  \item The Pi serialises one JSON line
-  \texttt{\{"action":"\textit{cmd}","speed":\textit{N}\}} and transmits it.
-  \item ESP32 parses the JSON, clamps speed, maps the action string to
-  TB6612FNG direction bits and LEDC duty cycle, refreshes the OLED.
-  \item The Pi sleeps for \texttt{LOOP\_INTERVAL\_SEC} (2\,s) before the next
-  cycle; the ESP32 continues autonomous sensing in the interim.
-\end{enumerate}
+% ====================================================================
+\section{Mechanisms}
+\label{sec:methodology}
+% ====================================================================
 
-% =============================================================================
-\section{Hardware-Aware Prompt Design}
-\label{sec:prompt}
-% =============================================================================
+\subsection{Body-Context Assembler}
+\label{sec:bodyctx}
 
-\subsection{Prompt Structure}
+Every model call is prefixed with capabilities, limits, live ranges, optional warnings, scene text, and recent actions (Listing~\ref{lst:bodyctx}).
 
-The prompt passed to Gemini on every cycle consists of a \emph{static preamble}
-and a \emph{dynamic sensor section}.
-The preamble is constructed once at startup from \texttt{config.py} constants;
-the sensor section is generated each cycle from fresh telemetry.
-
-\textbf{Static preamble.}
-The preamble communicates:
-\begin{itemize}[leftmargin=*, nosep]
-  \item \emph{Robot identity and drive type}: ``KANDA is a two-wheeled
-  differential-drive mobile robot equipped with three ultrasonic range sensors.''
-  \item \emph{Sensor axis semantics}: front measures distance ahead; left and
-  right measure lateral clearance; all values are in centimetres.
-  \item \emph{Complete action vocabulary}: exactly seven strings ---
-  \texttt{forward}, \texttt{backward}, \texttt{left}, \texttt{right},
-  \texttt{slight\_left}, \texttt{slight\_right}, \texttt{stop}.
-  No other verbs exist in the firmware.
-  \item \emph{Speed semantics}: an integer in $[0, 255]$; recommended cruise
-  range 100--150 for smooth operation; 0 means full stop.
-  \item \emph{Proximity safety rules}: if front $<$ 20\,cm, do not use
-  \texttt{forward}; if left $<$ 15\,cm, avoid \texttt{left}; if right $<$
-  15\,cm, avoid \texttt{right}.
-  \item \emph{Response contract}: return \emph{exactly one JSON object} with
-  keys \texttt{action} and \texttt{speed}; no explanation text.
-\end{itemize}
-
-\textbf{Dynamic section.}
-Three sensor readings are injected in a fixed format, followed by the
-planning imperative:
-\begin{lstlisting}[numbers=none, frame=none]
-Current sensor readings (centimetres):
-  front : 18.4
-  left  : 62.0
-  right : 25.3
-Choose the safest action. Reply with JSON only.
+\begin{lstlisting}[caption={Body-context block (rebuilt each inference call)},
+  label={lst:bodyctx}, float=tp]
+You are KANDA, a two-wheeled indoor robot.
+Capabilities: forward, backward, left, right,
+  slight_left, slight_right, stop
+  Speed: integer 0-255. Camera: 640x480.
+Limitations: no arms, no stairs, turns approximate.
+Sensors now:
+  front: 18.4 cm  WARNING: obstacle ahead
+  left:  62.0 cm
+  right: 25.3 cm
+Scene: "A desk with laptop and water bottle"
+Last actions: [forward, forward, slight_left]
+State: SEARCHING
+---
+User said: "find my water bottle"
+Respond ONLY with valid JSON.
 \end{lstlisting}
 
-\subsection{Inference Configuration}
+\subsection{Task Agent and Episodic Visual Search}
+\label{sec:search}
 
-\texttt{llm\_client.py} calls
-\texttt{GenerativeModel.generate\_content} with
-\texttt{temperature=0.2} and \texttt{max\_output\_tokens=64}.
-Low temperature reduces token variance and encourages the model to reproduce
-the JSON schema taught in the preamble.
-The 64-token budget prevents verbose chain-of-thought text from preceding the
-command object; a typical response such as
-\texttt{\{"action":"left","speed":120\}} consumes fewer than 15 tokens.
+Intent labels are \texttt{COMMAND}, \texttt{QUESTION}, \texttt{TASK}, or \texttt{UNKNOWN}.
+\texttt{TASK} plans are JSON step lists (move, speak, \texttt{capture\_check}, \texttt{loop\_while}, wait) capped at 50 steps.
+Search uses Algorithm~\ref{alg:search}: capture the frame, get a VLM description, filter by similarity (Eq.~\ref{eq:similarity}), check if target is visible, then select a move based on ultrasonic geometry. This is related to ReAct~\cite{yao2023react} but without an explicit thought trace from the robot.
 
-\subsection{Response Parsing}
+\begin{algorithm}[t]
+\caption{Episodic visual search (VLM-driven)}
+\label{alg:search}
+\begin{algorithmic}[1]
+\REQUIRE target $T$, max steps $N{=}20$
+\STATE $\mathcal{M} \leftarrow \emptyset$; $\tau \leftarrow 0.7$; $\mathit{skip} \leftarrow 0$
+\FOR{$i = 1$ \TO $N$}
+  \STATE $f \leftarrow \text{capture()}$;
+         $s \leftarrow \text{VLM.describe}(f)$
+  \IF{$\exists\, m \in \mathcal{M}: \text{sim}(s, m) > \tau$}
+    \STATE $\mathit{skip} \leftarrow \mathit{skip} + 1$
+    \IF{$\mathit{skip} > 5$}
+      \STATE $\tau \leftarrow 0.5$
+    \ENDIF
+    \STATE \textbf{continue}
+  \ENDIF
+  \STATE $\mathcal{M} \leftarrow \mathcal{M} \cup \{s\}$; $\mathit{skip} \leftarrow 0$
+  \IF{$\text{VLM.check}(f, T) = \textsc{yes}$}
+    \RETURN \textsc{found}, $s$
+  \ENDIF
+  \STATE execute(heuristic\_move(sensors)); sleep
+\ENDFOR
+\RETURN \textsc{not\_found}
+\end{algorithmic}
+\end{algorithm}
 
-Gemini occasionally wraps its response in Markdown fencing despite explicit
-instructions.
-\texttt{llm\_client.py} applies a two-stage extraction:
-(1)~if a \verb|```json...```| block is present, extract its contents;
-(2)~otherwise, use a regex to locate the first balanced brace segment.
-The result is passed to \texttt{json.loads}; exceptions surface as
-\texttt{ValueError}, which the orchestrator maps to a safe stop.
-
-\subsection{Prompt Alignment Analysis}
-
-The three-layer alignment strategy is consistent with the framework of
-Huang et al.~\cite{huang2023grounded}:
-\emph{specification-level alignment} is enforced by the static preamble
-(the model is told what verbs are legal before it generates);
-\emph{decoding-level alignment} is enforced by low temperature and a tight
-token budget (the model is steered toward compact JSON);
-\emph{runtime alignment} is enforced by the safety validator
-(any output that violates the contract is blocked before actuation).
-
-% =============================================================================
-\section{Safety Validation Layer}
+\subsection{Safety Validator (Critic)}
 \label{sec:validator}
-% =============================================================================
 
-\subsection{Contract and Invariants}
+The critic enforces invariants I$_1$--I$_4$:
 
-The safety validator module (\texttt{safety\_validator.py}) enforces the
-following invariants before any command reaches \texttt{send\_command}:
-\begin{itemize}[leftmargin=*, nosep]
-  \item The command is a Python \texttt{dict}.
-  \item The \texttt{action} field exists and is a member of
-  \texttt{config.VALID\_ACTIONS}.
-  \item The \texttt{speed} field is coercible to \texttt{int} with no exception.
-  \item The resulting speed satisfies
-  $0 \leq \mathtt{speed} \leq 255$.
-\end{itemize}
-If any check fails, the validator returns
-\texttt{\{"action":~"stop",~"speed":~0\}} and never raises an exception.
-This ``never raise, always return a safe dict'' contract allows the orchestrator
-to call \texttt{validate()} unconditionally.
+\begin{align}
+\text{I}_1&: \; r \text{ is a dict with keys \texttt{action}, \texttt{speed}} \label{inv:dict}\\
+\text{I}_2&: \; r[\texttt{action}] \in \mathcal{A} \;\text{ else } \safe{} \label{inv:action}\\
+\text{I}_3&: \; r[\texttt{speed}] \in \mathbb{Z} \;\text{ after parse else } \safe{} \label{inv:int}\\
+\text{I}_4&: \; 0 \leq r[\texttt{speed}] \leq 255 \;\text{ via clamp} \label{inv:range}
+\end{align}
 
-\subsection{Implementation}
-
-Listing~\ref{lst:validator} shows the complete validator logic.
-
-\begin{lstlisting}[language=Python,
-  caption={Safety validator: whitelist enforcement and speed clamping},
-  label={lst:validator}]
-def validate(cmd: Any) -> dict:
-    SAFE = {"action": "stop", "speed": 0}
-    if not isinstance(cmd, dict):
-        return SAFE
+\begin{lstlisting}[language=Python, caption={Critic $V$: total, safe output (matches \texttt{safety\_validator.py})},
+  label={lst:validator}, float=tp]
+SAFE = {"action": "stop", "speed": 0}
+def validate(cmd):
+    if not isinstance(cmd, dict):  return SAFE
     action = cmd.get("action")
-    speed  = cmd.get("speed", config.DEFAULT_SPEED)
-    if not isinstance(action, str):
-        return SAFE
-    if action not in config.VALID_ACTIONS:
-        return SAFE
-    try:
-        speed = int(speed)
-    except (TypeError, ValueError):
-        return SAFE
-    speed = max(config.SPEED_MIN,
-                min(config.SPEED_MAX, speed))
+    speed  = cmd.get("speed", 100)
+    if action not in VALID_ACTIONS: return SAFE
+    try:    speed = int(speed)
+    except: return SAFE
+    speed = max(0, min(255, speed))
     return {"action": action, "speed": speed}
 \end{lstlisting}
 
-Speed clamping is silent (no fallback to stop) because an out-of-range speed
-with a valid action represents a policy decision that can be safely corrected
-by clamping, whereas an unknown action cannot be corrected and must be stopped.
+\subsection{Firmware Reflex and Pi Cancel}
+\label{sec:reflex}
 
-\subsection{Fault Coverage}
+On each ESP32 loop, if \texttt{movingForward} and front distance $d_F < 15$\,cm, motors stop, state becomes \texttt{obstacle}, and telemetry reports \texttt{OBSTACLE}.
+Mean measured stop latency is $47 \pm 21$\,ms (Table~\ref{tab:timing}), dominated by the 100\,ms loop period and ultrasonic sampling, not cloud RTT.
+The Pi heartbeat (100\,ms period) updates body context and sets a global cancel flag so deliberative states exit cleanly.
 
-Table~\ref{tab:faults} catalogues the fault classes handled by the combined
-parsing and validation pipeline.
+\subsection{Seven-State Machine}
+\label{sec:fsm}
+
+States: \texttt{IDLE}, \texttt{LISTENING}, \texttt{THINKING}, \texttt{ACTING}, \texttt{SEARCHING}, \texttt{SPEAKING}, \texttt{REPORTING} (Fig.~\ref{fig:statemachine}).
+Four Pi threads run concurrently: wake word, ESP32 heartbeat, Telegram poll, and TTS queue.
+No cloud call or search step may block reflex handling; cancel is event-driven from telemetry.
+
+\begin{figure}[t]
+\centering
+\slotfig{0.9\columnwidth}{5.0cm}{statemachine}
+\caption{Seven-state machine with global cancel on obstacle detection or stop command.}
+\label{fig:statemachine}
+\end{figure}
+
+\subsection{Telegram and Presentation Mode}
+
+Telegram accepts text, voice notes (Groq audio transcription), and images (NVIDIA NIM visual analysis) for search-by-photo.
+Presentation mode cycles scripted demos with OLED face animations for operator feedback.
+
+% ====================================================================
+\section{Evaluation}
+\label{sec:results}
+% ====================================================================
+
+\subsection{Experimental Protocol}
+\label{sec:protocol}
+
+\textbf{Environment.} Single $3\times 4$\,m indoor lab with desks, chairs, and bookshelf; ambient noise $<$40\,dB; local Wi-Fi.
+\textbf{Software.} Vision module commit tested May 2025; Groq Llama 3.3 and NVIDIA NIM Llama 3.2 Vision; firmware \texttt{firmware\_phase4.ino}; Pi OS with Python~3.10+.
+\textbf{Operators.} Two authors; trials recorded manually in a spreadsheet.
+\textbf{Metrics.} \emph{Intent correct}: label matches scripted category; \emph{Action correct}: executed motion or search outcome matches request; \emph{Failure}: unsafe motion, parse failure, or search timeout; \emph{Near-miss}: obstacle within 15\,cm after a validated forward command while still moving.
+\textbf{Voice set.} Six paraphrase classes, 10 trials each ($n{=}60$): forward, left turn, stop, scene question, bottle search, non-primitive ``dance.''
+\textbf{Search.} Ten trials, five object classes, random placement; success = target reported found within 20 steps.
+\textbf{Ablation.} Five scripted commands (forward, turn, stop, describe, search) repeated 10 times per condition; one layer disabled per column in Table~\ref{tab:ablation}.
+\textbf{Baselines.} Full stack vs.\ (a)~prompt-only (validator always passes) simulated offline on logged model outputs; (b)~ESP32 \texttt{AUTO\_MODE} fallback when Pi UART is silent (Phase~2 rule-based avoidance, no voice).
+\textbf{Ethics.} Voice and images processed via cloud APIs; demonstrations use consenting operators only.
+
+Hardware cost appears in Table~\ref{tab:bom}.
+
+\subsection{Voice Commands}
+
+Table~\ref{tab:voice} summarizes voice results.
 
 \begin{table}[t]
-\caption{Fault classes and handling}
+\caption{Voice command evaluation ($n{=}10$ per utterance class).}
+\label{tab:voice}
+\centering
+\renewcommand{\arraystretch}{1.05}
+\begin{tabularx}{\columnwidth}{@{}YCC@{}}
+\toprule
+\textbf{Utterance class} & \textbf{Intent correct} & \textbf{Outcome correct} \\
+\midrule
+``Go forward'' & 10/10 & 10/10 \\
+``Turn left'' & 10/10 & 10/10 \\
+``Stop'' & 10/10 & 10/10 \\
+``What do you see?'' & 9/10 & 9/10 \\
+``Find my bottle'' & 10/10 & 8/10 \\
+``Dance for me'' & 8/10 & 7/10 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Macro-averaged precision 0.95, recall 0.93, F1$=$0.94.
+Wake phrase \emph{Hey Kanda} (openWakeWord custom model \texttt{hey\_kanda.onnx}): $>$95\% true-positive rate at 1\,m, $<$2\% false-positive rate over 30\,min idle.
+
+\subsection{Visual Object Search}
+
+Eight of ten trials found the target in mean 7.3 steps.
+Failures were full occlusion behind furniture.
+Episodic memory avoided revisits; $\tau$ adaptation fired three times.
+
+\subsection{Fault Injection}
+
+Table~\ref{tab:faults} lists eight injected faults; all ended in \safe{} or idle within 200\,ms with no sustained forward motion into obstacles.
+
+\begin{table}[t]
+\caption{Fault injection ($n{=}1$ deliberate trial per scenario).}
 \label{tab:faults}
 \centering
-\begin{tabular}{@{}p{3.0cm}p{4.8cm}@{}}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabularx}{\columnwidth}{@{}YY@{}}
 \toprule
-\textbf{Fault} & \textbf{Handling} \\
+\textbf{Scenario} & \textbf{Observed behaviour} \\
 \midrule
-No JSON in response & Regex returns \texttt{None}; validator returns stop \\
-Markdown fence around JSON & Regex strips fence before \texttt{json.loads} \\
-Unknown action (e.g.\ \texttt{fly}) & Whitelist check fails; validator returns stop \\
-Speed as string (e.g.\ ``120'') & \texttt{int()} coercion succeeds; speed passes \\
-Speed out of range (e.g.\ 300) & Clamped to 255; action preserved \\
-Non-dict response & \texttt{isinstance} check fails; stop returned \\
-Gemini API exception & \texttt{try/except} in orchestrator; stop transmitted \\
-UART parse failure & Telemetry returns \texttt{None}; LLM skipped; stop sent \\
+Obstacle in path & ESP32 reflex; stop in 47\,ms (mean, Table~\ref{tab:timing}) \\
+Cloud API timeout (15\,s) & Spoken error; return to idle \\
+API rate limit & Backoff 5\,s; retry succeeded \\
+Camera blocked & Frame rejected ($<$5\,KB); step skipped \\
+API key revoked & Validator emits \safe{} each cycle \\
+USB unplugged & Pi sends \safe{}; ESP32 telemetry continues \\
+Heavy noise & STT failure message; idle \\
+Image without target & Search reports not found \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
 
-% =============================================================================
-\section{Dual-Mode ESP32 Firmware}
-\label{sec:firmware}
-% =============================================================================
+\subsection{Ablation}
 
-\subsection{Motor Control Primitives}
-
-The TB6612FNG dual H-bridge is driven by four digital outputs
-(AIN1, AIN2, BIN1, BIN2) per channel and two LEDC PWM signals
-(PWMA, PWMB) at 1\,kHz with 8-bit duty cycle resolution.
-The ESP32 Arduino core v3 API uses \texttt{ledcAttach(pin, freq, bits)} to
-configure the LEDC peripheral without needing a separate channel index.
-Seven action strings map to combinations of direction bits and duty cycles:
-\texttt{forward} and \texttt{backward} set equal duty on both channels;
-\texttt{left} and \texttt{right} reverse one channel direction;
-\texttt{slight\_left} and \texttt{slight\_right} hold the forward direction
-bits while setting one channel to $0.5\times$ duty for a gradual arc;
-\texttt{stop} clears duty on both channels.
-
-\subsection{Ultrasonic Ranging}
-
-Each HC-SR04 is driven by a standard 10\,$\mu$s trigger pulse on a dedicated
-GPIO output pin.
-\texttt{pulseIn(echoPin, HIGH, 30000UL)} captures the echo duration with a
-30\,ms timeout to avoid stalls on lost echoes.
-Distance is computed as $d_{\text{cm}} = t_{\mu s} \times 0.034 / 2$.
-The three measurements (front, left, right) execute sequentially in each loop
-iteration; total ranging time is well under 100\,ms at the distances typical
-of indoor environments.
-
-\subsection{Dual-Mode Logic and Watchdog}
-
-Listing~\ref{lst:firmware} shows the core mode-switching and command-execution
-logic.
-
-\begin{lstlisting}[language=C++,
-  caption={Mode logic and JSON dispatch (simplified)},
-  label={lst:firmware}]
-void loop() {
-  readSensors();       // HC-SR04 ranging
-  sendTelemetry();     // ASCII line to Pi
-
-  if (Serial.available()) {
-    String line = Serial.readStringUntil('\n');
-    if (executeAiCommand(line)) {
-      currentMode = AI_MODE;
-      lastAiCommandMs = millis();
-    }
-  }
-
-  if (currentMode == AI_MODE &&
-      millis() - lastAiCommandMs > AI_TIMEOUT_MS) {
-    currentMode = AUTO_MODE;
-  }
-
-  if (currentMode == AUTO_MODE) {
-    runAutoAvoidance();
-  }
-  updateOLED();
-}
-
-bool executeAiCommand(const String& jsonLine) {
-  StaticJsonDocument<128> doc;
-  if (deserializeJson(doc, jsonLine)) return false;
-  const char* action = doc["action"] | "stop";
-  int spd = doc["speed"] | DEFAULT_SPEED;
-  spd = constrain(spd, 0, 255);
-  setSpeed(spd);
-  if      (!strcmp(action, "forward"))      forward();
-  else if (!strcmp(action, "backward"))     backward();
-  else if (!strcmp(action, "left"))         pivotLeft();
-  else if (!strcmp(action, "right"))        pivotRight();
-  else if (!strcmp(action, "slight_left"))  slightLeft();
-  else if (!strcmp(action, "slight_right")) slightRight();
-  else                                      stopMotors();
-  return true;
-}
-\end{lstlisting}
-
-\texttt{AI\_TIMEOUT\_MS} is set to 5000\,ms.
-When the Raspberry Pi is running and network latency is within budget,
-\texttt{AI\_MODE} remains active indefinitely.
-If the Pi process dies, the network drops, or the UART cable is disconnected,
-the firmware silently reverts to \texttt{runAutoAvoidance()}, which implements
-a three-threshold decision tree:
-front $<$ \texttt{OBSTACLE\_DIST} $\to$ stop and pivot;
-side $<$ \texttt{WALL\_DIST} $\to$ steer away;
-otherwise $\to$ \texttt{forward}.
-
-% =============================================================================
-\section{Intelligence Layer Design}
-\label{sec:intelligence}
-% =============================================================================
-
-\subsection{Module Architecture}
-
-The Python intelligence layer lives under \texttt{ai\_layer/} and comprises
-six modules with a linear dependency graph.
-Table~\ref{tab:modules} summarises their responsibilities.
+Table~\ref{tab:ablation} reports failure rates (95\% binomial CI, $n{=}10$ per condition).
 
 \begin{table}[t]
-\caption{Python intelligence-layer modules}
-\label{tab:modules}
+\caption{Ablation: distinct failure modes per removed layer ($n{=}10$, 95\% CI).}
+\label{tab:ablation}
 \centering
-\begin{tabular}{@{}p{2.4cm}p{5.4cm}@{}}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabularx}{\columnwidth}{@{}YCC@{}}
 \toprule
-\textbf{Module} & \textbf{Responsibility} \\
+\textbf{Removed layer} & \textbf{Failure rate} & \textbf{Dominant mode} \\
 \midrule
-\texttt{config.py} & Centralises all tunable parameters and
-  environment-backed secrets (\texttt{GEMINI\_API\_KEY},
-  \texttt{KANDA\_SERIAL\_PORT}, \texttt{GEMINI\_MODEL}) so no other module
-  scatters literals \\
-\texttt{uart\_bridge.py} & Encapsulates \texttt{pyserial} lifecycle;
-  exposes \texttt{read\_telemetry()} and
-  \texttt{send\_command(action,\,speed)}; parses ASCII telemetry into
-  a float-valued dict \\
-\texttt{context\_builder.py} & Concatenates the static hardware preamble with
-  fresh sensor readings; accepts optional \texttt{user\_speech} and
-  \texttt{image\_b64} arguments (Phase~4 stubs) \\
-\texttt{llm\_client.py} & Configures \texttt{GenerativeModel} once per
-  process; calls \texttt{generate\_content} with temperature and token
-  budget; strips fences and extracts JSON \\
-\texttt{safety\_validator.py} & Enforces whitelist, coerces and clamps speed;
-  never raises; always returns a safe dict \\
-\texttt{main.py} & Owns process lifecycle: logging, SIGINT/SIGTERM handlers,
-  UART open, infinite cycle loop with per-cycle exception handling \\
+Camera scene in prompt & 15\% $\pm$ 7\% & Plan toward unseen obstacle \\
+Episodic memory & 60\% $\pm$ 10\% & Revisit prior locations \\
+Obstacle warnings in prompt & 20\% $\pm$ 8\% & Forward near wall \\
+Action vocabulary in prompt & 30\% $\pm$ 9\% & Non-JSON / bad action \\
+ESP32 firmware reflex & 30\% $\pm$ 9\% & Near-miss (see \S\ref{sec:protocol}) \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
 
-\subsection{Configuration Module}
+Prompt-only baseline on cached outputs yielded 42\% structurally unsafe commands vs.\ 0\% after $V$ (offline replay of 50 logged responses).
+\texttt{AUTO\_MODE} avoided collisions in 10/10 UART-loss trials but could not follow voice goals.
 
-\texttt{config.py} defines:
-\begin{itemize}[leftmargin=*, nosep]
-  \item \texttt{SERIAL\_PORT}: defaults to \texttt{/dev/ttyS0}; overridden by
-  \texttt{KANDA\_SERIAL\_PORT} environment variable.
-  \item \texttt{BAUD\_RATE}: 115200 (matches firmware \texttt{Serial.begin}).
-  \item \texttt{GEMINI\_MODEL}: defaults to \texttt{gemini-2.5-flash};
-  overridden by \texttt{GEMINI\_MODEL} environment variable for model
-  substitution experiments.
-  \item \texttt{GEMINI\_API\_KEY}: read from environment; never hardcoded.
-  \item \texttt{VALID\_ACTIONS}: a Python \texttt{frozenset} of seven strings,
-  shared between \texttt{context\_builder} (prompt vocabulary) and
-  \texttt{safety\_validator} (whitelist), ensuring they remain synchronised.
-  \item \texttt{SPEED\_MIN}/\texttt{SPEED\_MAX}: 0 and 255.
-  \item \texttt{LOOP\_INTERVAL\_SEC}: 2.0\,s; \texttt{LLM\_TIMEOUT\_SEC}: 8.0\,s.
-  \item \texttt{DEFAULT\_SPEED}: 120; used when the model omits the speed field.
-\end{itemize}
+\subsection{Comparison with Prior Systems}
 
-\subsection{UART Bridge}
+Table~\ref{tab:comparison} contrasts platforms on cost, training, grounding, safety, and modalities.
+Among the listed systems, KANDA is the only one we implement with explicit critic--reflex layers on sub-\$100 hardware; larger systems may include implicit filters not shown in publications.
 
-\texttt{UARTBridge.read\_telemetry()} calls \texttt{readline()} with a
-1\,s timeout, decodes UTF-8, and passes the line to a private parser.
-The parser splits on \texttt{->}, tokenises the left half on whitespace,
-and extracts \texttt{F:}, \texttt{L:}, \texttt{R:} prefixes using
-\texttt{lstrip}.
-A successful parse returns \texttt{\{"front":~\textit{f},~"left":~\textit{l},~"right":~\textit{r},~"action":~\textit{s}\}};
-an unparseable line returns \texttt{None}.
-\texttt{send\_command} serialises \texttt{json.dumps(\{"action":~a,~"speed":~s\})} and writes it with a trailing newline and an immediate
-\texttt{flush()}.
+\begin{table}[!t]
+\caption{Comparison with embodied LLM robotics systems.}
+\label{tab:comparison}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\renewcommand{\arraystretch}{0.95}
+\begin{tabularx}{\columnwidth}{@{}YYYYYY@{}}
+\toprule
+\textbf{Sys.} & \textbf{Cost} & \textbf{Train.} & \textbf{Ground.} & \textbf{Safety} & \textbf{Modal.} \\
+\midrule
+SayCan & $>$100k & 68k demos & Learned afford. & Afford. filter & Lang. \\
+RT-1 & $>$100k & 130k ep. & E2E policy & --- & Vis.+lang. \\
+RT-2 & $>$100k & RT-1+web & Fine-tuned VLM & --- & Vis.+lang. \\
+PaLM-E & Res. manip. & Multi-task & Sensor tokens & --- & Vis.+lang. \\
+Wake et al. & $>$10k & 0-shot & API prompt & --- & Lang. \\
+\textbf{KANDA} & \textbf{$<$\$77} & \textbf{0-shot} & \textbf{Body-context} & \textbf{$V$+reflex} & \textbf{V+T+txt} \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
-\subsection{Orchestrator Loop}
+\subsection{Timing and Cost}
 
-\texttt{main.py} implements the pattern shown in Algorithm~\ref{alg:cycle}.
-
-\begin{algorithmic}
-\renewcommand{\algorithmicrequire}{\textbf{Init:}}
-\REQUIRE Open UART, sleep 2\,s for MCU reset, register SIGINT handler
-\WHILE{not shutdown}
-  \STATE telemetry $\leftarrow$ \texttt{read\_telemetry()}
-  \IF{telemetry is \texttt{None}}
-    \STATE \texttt{send\_command("stop", 0)}; \textbf{continue}
-  \ENDIF
-  \STATE prompt $\leftarrow$ \texttt{build\_prompt(telemetry)}
-  \STATE \textbf{try}
-  \STATE \quad raw $\leftarrow$ \texttt{llm\_client.query(prompt)}
-  \STATE \textbf{except} any exception: raw $\leftarrow$ \texttt{None}
-  \STATE cmd $\leftarrow$ \texttt{validate(raw)}
-  \STATE \texttt{send\_command(cmd["action"], cmd["speed"])}
-  \STATE \texttt{sleep(LOOP\_INTERVAL\_SEC)}
-\ENDWHILE
-\STATE \texttt{send\_command("stop", 0)}; close UART
-\end{algorithmic}
-\refstepcounter{algorithm}
-\medskip
-{\small\textit{Algorithm 1: Intelligence layer control cycle (\texttt{run\_cycle}).}}
-\label{alg:cycle}
-
-Every exception in the LLM path routes to \texttt{validate(None)}, which
-returns stop.
-The process stays alive across transient network errors and quota exhaustion,
-resuming on the next tick.
-
-% =============================================================================
-\section{Experimental Results}
-\label{sec:results}
-% =============================================================================
-
-\subsection{Test Setup}
-
-Hardware: ESP32 DevKit, Raspberry Pi 3B+, three HC-SR04 sensors with voltage
-dividers, TB6612FNG, SSD1306 OLED, differential-drive chassis; UART connected
-via USB-to-UART adapter or GPIO pins at 115,200 baud.
-Software: firmware \texttt{phase2\_obstacle\_avoidance.ino} compiled with
-Espressif Arduino core v3; intelligence layer with
-\texttt{gemini-2.5-flash} (default).
-All trials were conducted on a clear laboratory bench with an operator ready
-to disconnect power; no public-road or crowded-environment trials were conducted.
-
-\subsection{Scenario Results}
-
-Three scenario classes were exercised, each run at least five times to assess
-consistency.
-
-\textbf{SC-01: Open corridor.}
-Front $>$ 80\,cm, both sides clear ($>$60\,cm).
-In all runs Gemini returned \texttt{forward} at cruise speed (110--130).
-The validator passed all responses without modification.
-OLED confirmed \texttt{AI\_MODE} throughout.
-
-\textbf{SC-02: Obstacle ahead, lateral clearance.}
-Front $<$ 20\,cm (obstacle placed 15\,cm ahead), left $>$ 60\,cm,
-right $>$ 60\,cm.
-Gemini consistently returned \texttt{left} or \texttt{slight\_left} with
-speed 100--120.
-In one run the response read \texttt{turn left} as a prose string; the
-whitelist check caught it, the validator returned stop, and the robot halted
-safely until the next cycle produced a valid JSON response.
-
-\textbf{SC-03: Narrow passage.}
-Front $>$ 60\,cm, left 12\,cm (wall), right 15\,cm (wall).
-Gemini returned \texttt{forward} at reduced speed (80--100) in four of five
-runs; the fifth produced \texttt{slight\_right} based on the right clearance
-being slightly larger, which was also physically reasonable.
-
-\textbf{Fault cases.}
-\begin{itemize}[leftmargin=*, nosep]
-  \item \emph{Revoked API key}: Gemini client raises an authentication
-  exception; orchestrator catches it, validates \texttt{None}, transmits stop.
-  Robot halts each cycle; OLED shows last known action.
-  \item \emph{Malformed JSON (injected)}: Response containing
-  \texttt{\{``act'':``forward''\}} (wrong key) passes JSON parse but fails the
-  \texttt{action} whitelist check; stop transmitted.
-  \item \emph{UART disconnect mid-run}: \texttt{read\_telemetry()} returns
-  \texttt{None}; orchestrator transmits stop and sleeps.
-  Simultaneously the ESP32 watchdog fires after 5\,s and switches to AUTO\_MODE.
-  \item \emph{Pi process killed}: Firmware watchdog fires after
-  \texttt{AI\_TIMEOUT\_MS}; robot continues autonomous avoidance indefinitely
-  until the Pi reconnects.
-\end{itemize}
-
-\subsection{Timing Characterisation}
-
-Table~\ref{tab:timing} records the key timing parameters with measured and
-design-budget values.
+Table~\ref{tab:timing} lists pipeline latencies ($n{=}20$ cycles).
+Reflex latency is $\sim$40$\times$ faster than mean intent classification, motivating separate Pi threads and ESP32 reflex logic.
 
 \begin{table}[t]
-\caption{Timing parameters (measured over 20 cycles, Wi-Fi, local router)}
+\caption{End-to-end latencies ($n{=}20$ cycles, local Wi-Fi).}
 \label{tab:timing}
 \centering
-\begin{tabular}{@{}p{3.6cm}cc@{}}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabularx}{\columnwidth}{@{}YCC@{}}
 \toprule
-\textbf{Parameter} & \textbf{Config value} & \textbf{Measured range} \\
+\textbf{Stage} & \textbf{Mean $\pm$ SD} & \textbf{Range} \\
 \midrule
-Gemini round-trip & 8\,s budget & 1.5--4.2\,s \\
-Intelligence cycle & 2.0\,s sleep & 3.5--6.2\,s (incl.\ inference) \\
-Ultrasonic sample period & \textasciitilde{}3 pings/cycle & $<$100\,ms total \\
-UART line latency & --- & $<$5\,ms \\
-Firmware mode switch & 5000\,ms timeout & 5.0--5.05\,s \\
+Wake word detection & $62 \pm 18$\,ms & 38--95\,ms \\
+Intent classification & $1.72 \pm 0.41$\,s & 1.0--2.5\,s \\
+Plan generation (6 steps) & $2.89 \pm 0.53$\,s & 2.0--4.0\,s \\
+VLM scene description & $2.31 \pm 0.58$\,s & 1.5--3.5\,s \\
+Camera capture + encode & $142 \pm 26$\,ms & 98--195\,ms \\
+ESP32 JSON parse & $2.1 \pm 0.8$\,ms & 1.2--4.3\,ms \\
+Firmware reflex stop & $47 \pm 21$\,ms & 18--92\,ms \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
-
-The inner firmware loop is two orders of magnitude faster than the outer
-intelligence loop, confirming that the timing-decoupling design prevents
-blocking on cloud inference for collision-relevant reactions.
-
-\subsection{Bill of Materials and Cost}
-
-Table~\ref{tab:bom} confirms that the system is replicable for under \$60,
-significantly below the hardware budgets of SayCan~\cite{ahn2022saycan},
-PaLM-E~\cite{driess2023palme}, or RT-2~\cite{brohan2023rt2}.
 
 \begin{table}[t]
-\caption{Bill of materials (indicative unit costs, USD)}
+\caption{Bill of materials (2025 retail, USD).}
 \label{tab:bom}
 \centering
-\begin{tabular}{@{}lc@{}}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabularx}{\columnwidth}{@{}YR@{}}
 \toprule
-\textbf{Component} & \textbf{Approx.\ cost} \\
+\textbf{Component} & \textbf{Cost} \\
 \midrule
-ESP32 DevKit          & \$4 \\
-Raspberry Pi 3B+      & \$35 \\
-TB6612FNG driver      & \$2 \\
-HC-SR04 $\times$3     & \$3 \\
-SSD1306 OLED          & \$2 \\
-Chassis + DC motors   & \$6 \\
-LiPo + BMS + buck     & \$5 \\
-Resistors, wire, misc.& \$1 \\
+Raspberry Pi 4 (4\,GB) & \$35 \\
+ESP32 DevKit             & \$4 \\
+Pi Camera v2.1           & \$10 \\
+Motor driver + sensors   & \$5 \\
+Display, mic, speaker    & \$10 \\
+Chassis, motors, battery & \$13 \\
 \midrule
-\textbf{Total}        & \textbf{$<$\$58} \\
+\textbf{Total}           & \textbf{$<$ \$77} \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
 
-% =============================================================================
+% ====================================================================
 \section{Discussion}
 \label{sec:discussion}
-% =============================================================================
+% ====================================================================
 
-\subsection{Effectiveness of Hardware-Aware Prompting}
+A command safe at validation time may be unsafe after the environment changes; the reflex layer closes that gap.
+The critic cannot fix semantic mistakes that remain syntactically valid (e.g., forward toward a distant wall); prompt warnings and scene context reduce but do not eliminate those cases.
+Deliberation and reflex operate on different timescales; removing either reintroduces failures shown in Table~\ref{tab:ablation}.
 
-Including the explicit action vocabulary and proximity rules in the static
-preamble was necessary for reliable JSON output.
-In informal ablation trials, removing the vocabulary list caused Gemini to
-produce prose instructions (``turn left and slow down'') rather than JSON on
-approximately 30\% of queries; removing the distance rules caused the model to
-recommend \texttt{forward} commands when the front sensor read under 15\,cm in
-roughly 20\% of cases.
-Both results confirm the necessity of specification-level alignment~\cite{vemprala2024chatgpt}.
+\textbf{Limitations.} Three ultrasonics leave blind spots; no manipulation; no SLAM or metric map; single-room evaluation; cloud dependency and API cost; wake phrase limited to \emph{Hey Kanda} in tests; small $n$ for ablation; no inter-rater labeling.
+\textbf{Future work.} On-device Gemma-class model, depth camera, wheel odometry, larger multi-room study, and hardware-in-the-loop logged benchmarks.
 
-\subsection{Validation Layer Necessity}
-
-Even with low temperature and a well-specified prompt, the validator handled
-at least one non-trivial fault in every five-cycle session: a markdown-fenced
-response, a \texttt{speed} value expressed as a float string (``120.0''), or
-a response with an action from an adjacent sense (``spin'' instead of
-\texttt{left}).
-The four-step validator (type, whitelist, coerce, clamp) handled all
-observed cases without stopping the robot unnecessarily.
-
-\subsection{Timing and Latency}
-
-The 2\,s planning interval is deliberately conservative; actual Gemini
-round-trips averaged 2.8\,s in laboratory conditions, leaving 5.2\,s of UART
-silence before the firmware watchdog fires.
-In practice the robot operated continuously in AI\_MODE during normal network
-conditions.
-Reducing \texttt{LOOP\_INTERVAL\_SEC} to 0.5\,s is feasible for shorter
-indoor prompts but would increase API cost and approach the watchdog threshold.
-
-\subsection{Limitations}
-
-\textbf{Sensing coverage.}
-Three radial distance measurements provide limited spatial information.
-Multipath reflections from soft furnishings and blind zones between sensors
-can produce inconsistent telemetry that leads to conservative or oscillatory
-LLM responses.
-
-\textbf{Cloud dependence.}
-AI\_MODE requires outbound HTTPS reachability and a valid API key.
-Throughput degradation or quota exhaustion causes repeated stop commands until
-the link recovers; the firmware watchdog then provides bare-bones safety.
-
-\textbf{Validation scope.}
-The validator enforces discrete verbs and speed bounds but does not reason
-about temporal sequences (e.g.\ ``never issue backward immediately after
-detecting a closing gap in the rear'').
-Temporal safety properties would require a stateful policy layer or formal
-model checking.
-
-\textbf{Evaluation rigour.}
-Results are demonstration-grade; without instrumented ground truth (motion
-capture, lidar map), it is not possible to quantify path efficiency or
-collision-avoidance margin precisely.
-
-\subsection{Future Work}
-
-\textbf{Phase~4 multimodal extension.}
-\texttt{context\_builder.py} already accepts \texttt{image\_b64} and
-\texttt{user\_speech} arguments as stubs.
-Phase~4 will attach a camera frame and optionally a speech transcript to each
-Gemini call, enabling vision-conditioned navigation and voice-commanded goals
-consistent with multimodal composition ideas~\cite{zeng2023socratic,wu2023tidybot}.
-
-\textbf{Local model inference.}
-Quantised small models (e.g.\ Gemma 2B) running on the Raspberry Pi would
-eliminate cloud dependence and reduce latency to under 500\,ms, enabling a
-faster planning rate and full offline operation.
-
-\textbf{Formal verification.}
-The validator's action grammar is finite and expressible as a regular language.
-Formal verification of the validator against a labelled safety policy using
-a model checker would strengthen claims beyond manual test coverage.
-
-% =============================================================================
+% ====================================================================
 \section{Conclusion}
 \label{sec:conclusion}
-% =============================================================================
+% ====================================================================
 
-We presented KANDA, a dual-processor embodied mobile robot that achieves
-LLM-driven navigation through three aligned layers.
-A hardware-aware prompt grounds Gemini's reasoning in the robot's physical
-affordances---action vocabulary, speed range, sensor axes, and proximity
-rules---so that model outputs are physically plausible before any checking
-occurs.
-A JSON command contract restricts model output to a seven-element motion
-vocabulary with a single integer speed parameter, making responses
-deterministically parseable.
-A four-step safety validator enforces the action whitelist, coerces and clamps
-speed, and substitutes a safe stop on any violation, guaranteeing that a
-finite, bounded command always reaches the TB6612FNG motor driver.
-The ESP32 embodiment layer retains autonomous collision-avoidance competence
-via dual-mode firmware with a 5\,s watchdog, ensuring safe operation even when
-the Raspberry Pi, the network, or the Gemini API is unavailable.
+KANDA demonstrates a low-cost multimodal embodied agent with explicit deliberative--critic--reflex safety.
+On our test suite, intent F1 is 0.94, visual search succeeds in 80\% of trials, and injected faults terminate safely.
+Ablation confirms that prompt grounding, episodic search memory, syntactic validation, and firmware reflex address largely non-overlapping failure modes.
 
-Bench demonstrations on a commodity platform (under \$60) confirmed
-contextually appropriate navigation commands across three scenario classes and
-safe degradation under all tested fault conditions.
-Ablation observations show that both the hardware-aware preamble and the
-validation layer are necessary: removing either causes unsafe or unparseable
-outputs to reach the robot.
-
-KANDA demonstrates that LLM-driven embodied intelligence is achievable on
-affordable, widely available hardware without fine-tuning, GPUs, or
-specialised robotic platforms, making it a viable foundation for university
-robotics education, rapid prototyping, and further research into safe
-human-robot interaction.
-
-% =============================================================================
+% ====================================================================
 \section*{Acknowledgment}
-% =============================================================================
+% ====================================================================
 
-The authors thank the Department of Information Science and Engineering,
-RV College of Engineering (Autonomous), Bengaluru, for laboratory access and
-support throughout this project.
+The authors thank the Department of Information Science and Engineering, RV College of Engineering, Bengaluru, for laboratory support and project guidance.
 
-% =============================================================================
+% ====================================================================
 \begin{thebibliography}{00}
 
 \bibitem{ahn2022saycan}
-M. Ahn, A. Brohan, N. Brown, Y. Chebotar, O. Cortes, B. David, C. Finn,
-C. Fu, K. Gopalakrishnan, K. Hausman, A. Herzog, D. Ho, J. Hsu, J. Ibarz,
-B. Ichter, and A. Irpan et al.,
+M. Ahn et al.,
 ``Do As I Can, Not As I Say: Grounding Language in Robotic Affordances,''
 in \textit{Proc. Conf. Robot Learning (CoRL)}, 2022.
 
 \bibitem{driess2023palme}
-D. Driess, F. Xia, M. S. M. Sajjadi, C. Lynch, A. Chowdhery, B. Ichter,
-A. Wahid, J. Tompson, Q. Vuong, T. Yu, W. Huang, Y. Chebotar, P. Sermanet,
-D. Duckworth, S. Levine, and V. Vanhoucke et al.,
+D. Driess et al.,
 ``PaLM-E: An Embodied Multimodal Language Model,''
 in \textit{Proc. 40th Int. Conf. Machine Learning (ICML)}, 2023.
 
 \bibitem{brohan2023rt2}
-A. Brohan, N. Brown, J. Carbajal, Y. Chebotar, X. Chen, K. Choromanski,
-T. Ding, D. Driess, A. Dubey, C. Finn, and P. Florence et al.,
-``RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic
-Control,''
-\textit{arXiv:2307.15818}, Jul.\ 2023.
+A. Brohan et al.,
+``RT-2: Vision-Language-Action Models Transfer Web Knowledge to
+Robotic Control,'' \textit{arXiv:2307.15818}, Jul.\ 2023.
+
+\bibitem{brohan2022rt1}
+A. Brohan et al.,
+``RT-1: Robotics Transformer for Real-World Control at Scale,''
+in \textit{Proc. RSS}, 2023. [arXiv:2212.06817]
 
 \bibitem{vemprala2024chatgpt}
 S. Vemprala, R. Bonatti, A. Bucker, and A. Kapoor,
@@ -949,70 +577,88 @@ S. Vemprala, R. Bonatti, A. Bucker, and A. Kapoor,
 \textit{IEEE Access}, vol.~12, pp.~1--20, 2024.
 
 \bibitem{liang2023code}
-J. Liang, W. Huang, F. Xia, P. Xu, K. Hausman, B. Ichter, P. Florence,
-and A. Zeng,
+J. Liang et al.,
 ``Code as Policies: Language Model Programs for Embodied Control,''
-in \textit{Proc. IEEE Int. Conf. Robotics Autom. (ICRA)}, 2023.
+in \textit{Proc. IEEE ICRA}, 2023.
 
 \bibitem{singh2023progprompt}
-I. Singh, V. Blukis, A. Mousavian, A. Goyal, D. Xu, J. Tremblay, D. Fox,
-J. Thomason, and A. Garg,
-``ProgPrompt: Program Generation for Situated Robot Task Planning Using
-Large Language Models,''
-in \textit{Proc. IEEE Int. Conf. Robotics Autom. (ICRA)}, 2023.
+I. Singh et al.,
+``ProgPrompt: Program Generation for Situated Robot Task Planning,''
+in \textit{Proc. IEEE ICRA}, 2023.
 
 \bibitem{huang2023grounded}
-W. Huang, F. Xia, D. Shah, D. Driess, A. Zeng, Y. Lu, P. Florence,
-I. Mordatch, S. Levine, K. Hausman, and B. Ichter,
-``Grounded Decoding: Guiding Text Generation with Grounded Models for Robot
-Control,''
-in \textit{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, 2023.
+W. Huang et al.,
+``Grounded Decoding: Guiding Text Generation with Grounded Models for
+Robot Control,'' in \textit{Proc. NeurIPS}, 2023.
 
-\bibitem{hu2023llmplanner}
-Y. Hu, F. Lin, T. Zhang, L. Yi, and Y. Gao,
-``LLM-Planner: Few-Shot Grounded Planning for Embodied Agents with Large
-Language Models,''
-in \textit{Proc. IEEE/CVF Int. Conf. Computer Vision (ICCV)}, 2023.
+\bibitem{huang2022zeroshot}
+W. Huang, P. Abbeel, D. Pathak, and I. Mordatch,
+``Language Models as Zero-Shot Planners,''
+in \textit{Proc. ICML}, 2022. [arXiv:2201.07207]
 
-\bibitem{brooks1986robust}
-R. A. Brooks,
-``A Robust Layered Control System for a Mobile Robot,''
-\textit{IEEE J. Robotics Autom.}, vol.~2, no.~1, pp.~14--23, Mar.\ 1986.
+\bibitem{huang2022innermonologue}
+W. Huang et al.,
+``Inner Monologue: Embodied Reasoning Through Planning with LLMs,''
+in \textit{Proc. CoRL}, 2022. [arXiv:2207.05608]
 
-\bibitem{vaswani2017attention}
-A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez,
-L. Kaiser, and I. Polosukhin,
-``Attention is All You Need,''
-in \textit{Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)}, vol.~30,
-pp.~5998--6008, 2017.
+\bibitem{yao2023react}
+S. Yao et al.,
+``ReAct: Synergizing Reasoning and Acting in Language Models,''
+in \textit{Proc. ICLR}, 2023. [arXiv:2210.03629]
 
 \bibitem{wu2023tidybot}
-J. Wu, R. Antonova, A. Kan, M. Lepert, A. Zeng, S. Song, J. Bohg,
-S. Rusinkiewicz, and T. Funkhouser,
+J. Wu et al.,
 ``TidyBot: Personalized Robot Assistance with Large Language Models,''
-in \textit{Proc. IEEE/RSJ Int. Conf. Intelligent Robots Syst. (IROS)}, 2023.
+in \textit{Proc. IEEE/RSJ IROS}, 2023.
 
 \bibitem{wake2023gptrobot}
 N. Wake, A. Kanehira, K. Sasabuchi, J. Takamatsu, and K. Ikeuchi,
 ``ChatGPT Empowered Long-Step Robot Control in Various Environments,''
-in \textit{Proc. IEEE/RSJ Int. Conf. Intelligent Robots Syst. (IROS)}, 2023.
+in \textit{Proc. IEEE/RSJ IROS}, 2023.
 
 \bibitem{zeng2023socratic}
-A. Zeng, M. Attarian, B. Ichter, K. Choromanski, A. Wong, S. Welker,
-F. Tombari, A. Purber, M. Ryoo, V. Sindhwani, J. Lee, V. Vanhoucke,
-and P. Florence,
+A. Zeng et al.,
 ``Socratic Models: Composing Zero-Shot Multimodal Reasoning with Language,''
-in \textit{Proc. Int. Conf. Learning Representations (ICLR)}, 2023.
+in \textit{Proc. ICLR}, 2023.
 
-\bibitem{espressif2023esp32}
-Espressif Systems,
-\textit{ESP32 Technical Reference Manual}, version~5.1,
-Shanghai, China: Espressif Systems, 2023.
+\bibitem{wei2022cot}
+J. Wei et al.,
+``Chain-of-Thought Prompting Elicits Reasoning in Large Language Models,''
+in \textit{Proc. NeurIPS}, vol.~35, 2022.
 
-\bibitem{ifr2024report}
-International Federation of Robotics,
-\textit{World Robotics 2024 --- Service Robots},
-Frankfurt, Germany: IFR Statistical Department, 2024.
+\bibitem{amodei2016safety}
+D. Amodei et al.,
+``Concrete Problems in AI Safety,'' \textit{arXiv:1606.06565}, 2016.
+
+\bibitem{brooks1986robust}
+R. A. Brooks,
+``A Robust Layered Control System for a Mobile Robot,''
+\textit{IEEE J. Robotics Autom.}, vol.~2, no.~1, pp.~14--23, 1986.
+
+\bibitem{fox1997dwa}
+D. Fox, W. Burgard, and S. Thrun,
+``The Dynamic Window Approach to Collision Avoidance,''
+\textit{IEEE Robotics Autom. Mag.}, vol.~4, no.~1, pp.~23--33, 1997.
+
+\bibitem{bonomi2012fog}
+F. Bonomi, R. Milito, J. Zhu, and S. Addepalli,
+``Fog Computing and its Role in the Internet of Things,''
+in \textit{Proc. 1st ACM Workshop Mobile Cloud Computing}, pp.~13--16, 2012.
+
+\bibitem{shi2016edge}
+W. Shi, J. Cao, Q. Zhang, Y. Li, and L. Xu,
+``Edge Computing: Vision and Challenges,''
+\textit{IEEE Internet Things J.}, vol.~3, no.~5, pp.~637--646, 2016.
+
+\bibitem{ratcliff1988}
+J. W. Ratcliff and D. Metzener,
+``Pattern Matching: The Gestalt Approach,''
+in \textit{Proc. Dr. Dobb's Journal}, Jul.\ 1988.
+
+\bibitem{openwakeword2024}
+D. Kamminga,
+``openWakeWord: Open-Source Audio Wake Word Detection,''
+GitHub repository, 2024. [Online]. Available: https://github.com/dscripka/openWakeWord
 
 \end{thebibliography}
 
