@@ -1,80 +1,87 @@
-# KANDA — Embodied AI Robot Agent
+# KANDA — Multimodal Embodied Robot Agent
 
 **KANDA** — Knowledge-driven Autonomous Navigation and Decision-making Agent
 
-A mobile robot where **Gemini is the brain and the ESP32 is the body**. You speak to it naturally, it plans and acts using its camera, sensors, and motors.
+A sub-$77 multimodal embodied robot where **Groq Llama 3.3 is the language brain, NVIDIA NIM Llama 3.2 Vision is the eyes, and the ESP32 is the body**. You speak to it naturally; it plans and acts using its camera, sensors, and motors with a three-layer safety architecture.
+
+<p align="center">
+  <img src="overleaf/images/kanda_robot.jpg" alt="KANDA Prototype" width="600"/>
+</p>
 
 ---
 
 ## What KANDA can do
 
-- **"Hey Kanda, go forward 2 seconds, turn left 5 seconds, reverse 3 seconds"** → executes the timed sequence
-- **"Hey Kanda, find my water bottle"** → searches the room autonomously, reports when found
-- **"Hey Kanda, what do you see?"** → describes the camera view out loud
-- **"Hey Kanda, go near the door"** → plans and navigates
+- **"Hey Kanda, go forward"** → validates and executes the motor command
+- **"Hey Kanda, find my water bottle"** → searches the room autonomously using episodic visual search
+- **"Hey Kanda, what do you see?"** → describes the camera view using NVIDIA NIM VLM
 - **"Hey Kanda, stop"** → cancels anything immediately
-- **Any natural language instruction** → Gemini plans the physical response using full body context (sensors + camera + history)
+- **Telegram remote control** → send text, voice notes, or photos via Telegram bot
+- **Any natural language instruction** → Groq classifies intent and plans the physical response using full body context (sensors + camera + history)
 
 ---
 
-## Architecture
+## Architecture: Deliberative–Critic–Reflex
 
 ```
-                    ┌─────────────────────────────────────────┐
-                    │           Raspberry Pi 4 (Brain)         │
-                    │                                           │
-  Earphone Mic ──── │ Wake Word → VAD Mic → Gemini ASR         │
-                    │                   ↓                       │
-  OV5647 Camera ─── │ Camera → VLM → Body Context              │
-                    │                   ↓                       │
-                    │ Task Agent → Gemini Planner               │
-                    │    (intent: COMMAND / QUESTION / TASK)    │
-                    │                   ↓                       │
-                    │ Plan Executor → JSON commands             │
-                    │                   ↓                       │
-                    │ espeak-ng → Bluetooth Speaker             │
-                    └────────────────┬────────────────────────-─┘
-                                     │ USB Serial (JSON)
-                    ┌────────────────▼─────────────────────────┐
-                    │              ESP32 (Body)                  │
-                    │                                           │
-                    │  Motors ← TB6612FNG                       │
-                    │  Sensors ← HC-SR04 × 3                    │
-                    │  OLED ← Face animations per state         │
-                    │  Safety stop ← obstacle < 15cm            │
-                    └───────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                CLOUD TIER (Deliberative)                  │
+│   Groq Llama 3.3 (text reasoning, intent, planning)     │
+│   NVIDIA NIM Llama 3.2 Vision (scene descriptions)      │
+│   Temperature: 0.1 │ Latency: 1.5–4s │ UNTRUSTED       │
+└──────────────────────────┬──────────────────────────────┘
+                           │ HTTPS (JSON)
+┌──────────────────────────▼──────────────────────────────┐
+│                 EDGE TIER (Critic)                        │
+│              Raspberry Pi 4 (Python 3.10+)               │
+│                                                          │
+│  Wake Word (openWakeWord) → STT → Intent Classifier     │
+│  Body-Context Assembler → LLM Call → Safety Validator    │
+│  7-State Machine │ Telegram Bot │ gTTS Speaker           │
+│                                                          │
+│  Validator V: Any → {action ∈ A, speed ∈ [0,255]}       │
+│  42% of raw LLM outputs are structurally unsafe →       │
+│  after V, 0% violate safety invariants                   │
+└──────────────────────────┬──────────────────────────────┘
+                           │ UART 115,200 baud (JSON ↓ telemetry ↑)
+┌──────────────────────────▼──────────────────────────────┐
+│                DEVICE TIER (Reflex)                       │
+│                    ESP32 DevKit                           │
+│                                                          │
+│  HC-SR04 × 3 (front/left/right) @ 10 Hz                 │
+│  Emergency stop: front < 15 cm → motors OFF in 47ms     │
+│  TB6612FNG motor driver │ SSD1306 OLED face             │
+│  Independent of Pi/cloud — works even if USB unplugged   │
+└─────────────────────────────────────────────────────────┘
 ```
 
 **States:** `IDLE` → `LISTENING` → `THINKING` → `ACTING / SEARCHING` → `SPEAKING` → `REPORTING` → `IDLE`
 
 ---
 
-## Hardware
+## Hardware (Total: < $77)
 
-| Component | Purpose |
-|-----------|---------|
-| Raspberry Pi 4 (2GB+) | Brain — runs AI, camera, voice |
-| ESP32 DevKit | Body — motors, sensors, OLED |
-| RPi Camera Module v2.1 | Vision input (CSI ribbon) |
-| Wired earphone with mic | Voice input (3.5mm jack) |
-| Bluetooth speaker | Voice output |
-| HC-SR04 × 3 | Front / Left / Right ultrasonic |
-| SSD1306 OLED (128×64) | Animated face display |
-| TB6612FNG | Dual motor driver |
-| 2× LiPo + BMS | Motor power |
-| Power bank (5V 2A+) | Raspberry Pi power |
+| Component | Cost | Purpose |
+|-----------|------|---------|
+| Raspberry Pi 4 (4 GB) | $35 | Brain — runs AI, camera, voice |
+| ESP32 DevKit | $4 | Body — motors, sensors, OLED |
+| Pi Camera v2.1 | $10 | Vision input (CSI ribbon) |
+| Motor driver + sensors | $5 | TB6612FNG + HC-SR04 × 3 |
+| Display, mic, speaker | $10 | SSD1306 OLED, USB mic, BT speaker |
+| Chassis, motors, battery | $13 | 2WD chassis + LiPo + power bank |
 
 ---
 
 ## Quick Start
 
-### Step 1 — Get API key (only one needed)
+### Step 1 — Get API keys
 
 | Key | Where |
 |-----|-------|
-| **Gemini** | [aistudio.google.com](https://aistudio.google.com) → Get API key — free |
+| **Groq** | [console.groq.com](https://console.groq.com) → API Keys — free tier |
+| **NVIDIA NIM** | [build.nvidia.com](https://build.nvidia.com) → API Catalog — free tier |
 
-**Wake word uses openWakeWord — no account, no API key, fully offline.** Default wake phrase is **"Hey Jarvis"**. To use a different phrase, see the Wake Word section below.
+**Wake word uses openWakeWord — no account, no API key, fully offline.**
 
 > **No mic?** Set `KANDA_WAKE_WORD=0` and press **Enter** in the terminal to wake KANDA.
 
@@ -82,20 +89,13 @@ A mobile robot where **Gemini is the brain and the ESP32 is the body**. You spea
 
 ### Step 2 — Copy files to Raspberry Pi
 
-From your Mac/PC:
-
 ```bash
-# Replace raspberrypi.local with your Pi's IP if mDNS doesn't work
 rsync -av kanda/vision_module/ pi@raspberrypi.local:~/kanda/
 ```
-
-Or download the zip from GitHub and extract on the Pi.
 
 ---
 
 ### Step 3 — Run setup on the Pi
-
-SSH into the Pi, then:
 
 ```bash
 cd ~/kanda
@@ -103,65 +103,18 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-This installs all system packages and Python dependencies automatically.
-
 ---
 
 ### Step 4 — Flash ESP32
 
-**File to flash:** `vision_module/firmware_phase4.ino`
+**File:** `vision_module/firmware_phase4.ino`
 
-#### 4a — Install Arduino IDE
-
-Download from [arduino.cc/en/software](https://www.arduino.cc/en/software) (v2.x recommended).
-
-#### 4b — Add ESP32 board support
-
-1. Open Arduino IDE → **File → Preferences**
-2. Paste this URL into **"Additional boards manager URLs"**:
-   ```
-   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-   ```
-3. Click OK
-4. Go to **Tools → Board → Boards Manager**
-5. Search **esp32**, install **"esp32 by Espressif Systems"** (v2.x)
-
-#### 4c — Install required libraries
-
-Go to **Tools → Manage Libraries**, search and install each:
-
-| Library | Search term |
-|---------|-------------|
-| Adafruit GFX Library | `Adafruit GFX` |
-| Adafruit SSD1306 | `Adafruit SSD1306` |
-| ArduinoJson | `ArduinoJson` (by Benoit Blanchon) |
-
-#### 4d — Board settings
-
-Connect your ESP32 to your **Mac/PC** via USB, then set:
-
-| Setting | Value |
-|---------|-------|
-| **Board** | `ESP32 Dev Module` |
-| **Port** | the port that appears when ESP32 is plugged in (e.g. `/dev/cu.usbserial-0001` on Mac, `COM3` on Windows) |
-| **Upload Speed** | `115200` |
-| **Partition Scheme** | `Default 4MB with spiffs` |
-
-#### 4e — Open and upload
-
-1. Open `vision_module/firmware_phase4.ino` in Arduino IDE
-2. Click **Upload** (→ arrow button)
-3. Watch the console — you should see `Done uploading`
-4. Open **Serial Monitor** (baud: `115200`) — you should see:
-   ```
-   KANDA ready — waiting for Pi commands
-   F:30.5 L:21.8 R:16.4 -> STOP
-   F:30.5 L:21.8 R:16.4 -> STOP
-   ...
-   ```
-   > If you see sensor readings streaming — the firmware is working.
-
-5. Close Arduino IDE, then connect ESP32 to Pi via USB cable
+1. Install [Arduino IDE](https://www.arduino.cc/en/software) (v2.x)
+2. Add ESP32 board URL: `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
+3. Install libraries: **Adafruit GFX**, **Adafruit SSD1306**, **ArduinoJson**
+4. Board: `ESP32 Dev Module`, Upload Speed: `115200`
+5. Upload → verify Serial Monitor shows sensor readings at 115200 baud
+6. Connect ESP32 to Pi via USB
 
 ---
 
@@ -170,16 +123,13 @@ Connect your ESP32 to your **Mac/PC** via USB, then set:
 ```bash
 cd ~/kanda
 
-# Required
-export GEMINI_API_KEY=your_key_here
-
-# Optional — skip for keyboard fallback
-export PORCUPINE_ACCESS_KEY=your_key_here
+export GROQ_API_KEY=your_key_here
+export NVIDIA_API_KEY=your_key_here
 
 python3 main.py
 ```
 
-**Without ESP32** (Pi only, for testing):
+**Without ESP32** (testing):
 ```bash
 KANDA_NO_UART=1 python3 main.py
 ```
@@ -188,20 +138,17 @@ KANDA_NO_UART=1 python3 main.py
 
 ### Step 6 — Talk to it
 
-1. Say **"Hey Kanda"** (or press Enter if no Porcupine key)
+1. Say **"Hey Kanda"** (or press Enter if `KANDA_WAKE_WORD=0`)
 2. KANDA says **"Yes?"** and opens its eyes on the OLED
-3. Speak your command — recording stops automatically when you pause
-4. KANDA thinks, plans, and acts
+3. Speak your command — recording stops on silence
+4. KANDA classifies intent, plans, validates, and acts
 
 **Example commands:**
 ```
 "go forward"
-"go forward 3 seconds then turn left 2 seconds"
 "find my water bottle"
 "what do you see?"
-"go near the table"
 "dance"
-"patrol the room"
 "stop"
 ```
 
@@ -211,47 +158,50 @@ KANDA_NO_UART=1 python3 main.py
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GEMINI_API_KEY` | — | **Required.** Google AI Studio key |
+| `GROQ_API_KEY` | — | **Required.** Groq Cloud API key |
+| `NVIDIA_API_KEY` | — | **Required.** NVIDIA NIM API key |
 | `KANDA_NO_UART` | `0` | Set to `1` to run without ESP32 |
 | `KANDA_SERIAL_PORT` | `/dev/ttyUSB0` | ESP32 USB serial port |
-| `GEMINI_MODEL` | `gemini-2.5-flash-lite` | Gemini model to use |
-| `KANDA_WAKE_WORD` | `1` | Set to `0` to force keyboard fallback |
-| `KANDA_WAKE_WORD_MODEL` | `hey_jarvis` | Wake phrase model (`hey_jarvis`, `alexa`, `hey_mycroft`, or path to `.onnx`) |
-| `KANDA_WAKE_SENSITIVITY` | `0.5` | Wake word detection threshold (0.0–1.0) |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model for text reasoning |
+| `NVIDIA_VLM_MODEL` | `meta/llama-3.2-11b-vision-instruct` | NVIDIA NIM model for vision |
+| `KANDA_WAKE_WORD` | `1` | Set to `0` for keyboard fallback |
+| `KANDA_WAKE_WORD_MODEL` | `hey_kanda` | Wake phrase (or path to `.onnx`) |
+| `KANDA_WAKE_SENSITIVITY` | `0.5` | Detection threshold (0.0–1.0) |
 | `KANDA_VLM_INTERVAL` | `10.0` | Seconds between background scene descriptions |
 | `KANDA_VAD_SILENCE` | `1.5` | Silence seconds before recording stops |
-| `KANDA_VAD_MAX` | `8.0` | Max recording length in seconds |
-| `KANDA_SEARCH_MAX_STEPS` | `20` | Max steps in a find-task search loop |
-| `KANDA_GEMINI_TIMEOUT` | `15` | Seconds before Gemini call is abandoned |
+| `KANDA_SEARCH_MAX_STEPS` | `20` | Max steps in visual search loop |
+| `KANDA_GROQ_TIMEOUT` | `15` | Seconds before API call timeout |
 
 ---
 
-## Wake Word
+## Safety Architecture
 
-KANDA uses **openWakeWord** — fully open source, runs offline on Pi, no account needed.
+KANDA implements a **deliberative–critic–reflex** decomposition inspired by Brooks' subsumption architecture:
 
-### Built-in wake phrases (work immediately, no training)
+| Layer | Location | Timescale | What it does |
+|-------|----------|-----------|--------------|
+| **Deliberative** | Cloud (Groq/NIM) | 1.5–4 s | Proposes actions grounded in body context |
+| **Critic** | Pi (validator) | < 1 ms | Rejects/clamps every command; total function |
+| **Reflex** | ESP32 firmware | 47 ms | Halts motors on obstacle, independent of cloud |
 
-| Say this | Set `KANDA_WAKE_WORD_MODEL` to |
-|----------|-------------------------------|
-| **"Hey Jarvis"** | `hey_jarvis` (default) |
-| **"Alexa"** | `alexa` |
-| **"Hey Mycroft"** | `hey_mycroft` |
+**Ablation results** (n=10 per condition):
+- Remove scene context → 15% unsafe plans
+- Remove episodic memory → 60% redundant search steps  
+- Remove firmware reflex → 30% near-miss events
+- Raw LLM outputs → 42% structurally unsafe commands
 
-### Train a custom "Hey Kanda" model (~10 minutes, optional)
+---
 
-```bash
-pip install openwakeword[train]
-oww-train --phrase "hey kanda" --output hey_kanda.onnx
-export KANDA_WAKE_WORD_MODEL=hey_kanda.onnx
-```
+## Evaluation Results
 
-### Keyboard fallback (no mic needed)
-
-```bash
-KANDA_WAKE_WORD=0 python3 main.py
-# Press Enter in terminal to wake KANDA
-```
+| Metric | Result |
+|--------|--------|
+| Intent classification F1 (60 utterances) | 0.94 |
+| Visual search success (10 trials) | 8/10 |
+| Fault injection (8 scenarios) | All safe termination |
+| Firmware reflex latency | 47 ± 21 ms |
+| Cloud inference latency | 1.5–4.0 s |
+| Wake word false positive rate | < 2% |
 
 ---
 
@@ -261,50 +211,50 @@ KANDA_WAKE_WORD=0 python3 main.py
 kanda/
 ├── vision_module/          ← All Pi code (copy this to Pi)
 │   ├── main.py             ← Entry point — 7-state machine
-│   ├── config.py           ← All settings and State enum
+│   ├── config.py           ← Settings and State enum
 │   ├── body_context.py     ← Robot body awareness (sensors + scene + history)
-│   ├── task_agent.py       ← Intent parser, planner, ReAct search loop
-│   ├── plan_executor.py    ← Executes Gemini JSON plans step by step
-│   ├── voice_command.py    ← Audio transcription (Gemini)
-│   ├── wake_word.py        ← Porcupine wake word / keyboard fallback
+│   ├── task_agent.py       ← Intent classifier, planner, ReAct search
+│   ├── plan_executor.py    ← Executes JSON plans step by step
+│   ├── voice_command.py    ← Audio transcription (Groq Whisper)
+│   ├── wake_word.py        ← openWakeWord / keyboard fallback
 │   ├── mic.py              ← VAD microphone recording
-│   ├── speaker.py          ← TTS via espeak-ng → Bluetooth
+│   ├── speaker.py          ← TTS via gTTS → speaker
 │   ├── camera.py           ← RPi Camera v2.1 capture
-│   ├── vlm.py              ← Vision-Language Model (Gemini)
+│   ├── vlm.py              ← Vision-Language Model (NVIDIA NIM)
+│   ├── telegram_input.py   ← Telegram bot (text/voice/photo)
 │   ├── firmware_phase4.ino ← ESP32 firmware (flash via Arduino IDE)
 │   ├── setup.sh            ← Pi setup script
 │   └── requirements.txt    ← Python dependencies
-├── ai_layer/               ← Earlier prototype (reference only)
+├── ai_layer/               ← Earlier prototype (reference)
 ├── firmware/               ← Phase 2 ESP32 firmware (reference)
+├── overleaf/               ← LaTeX report and IEEE paper source
+│   ├── chapters/           ← Report chapters 1–9 + annexures
+│   ├── paper/kanda.tex     ← IEEE conference paper
+│   └── images/             ← Figures and diagrams
 └── docs/                   ← Pin config and wiring diagrams
 ```
 
 ---
 
-## How it works — under the hood
+## How it works
 
-Every time KANDA gets a voice command, Gemini receives the **full body context**:
+Every inference call receives the **full body context**:
 
 ```
-ROBOT CAPABILITIES: forward/backward/left/right, camera, sensors, speaker...
-CURRENT SENSORS:    front=30cm  left=45cm  right=22cm
-CURRENT SCENE:      A wooden table with a laptop on it
-RECENT ACTIONS:     forward 2s, left 0.8s, stop
-USER INSTRUCTION:   "go forward 2 seconds then turn left 5 seconds"
+You are a robot with two wheels called KANDA.
+Capabilities: forward, backward, left, right, slight_left, slight_right, stop.
+Speed range: 0–255. Camera resolution: 640×480.
+Sensors: Front=30.5cm  Left=18.4cm(WARNING)  Right=62.0cm
+Scene: "A desk with laptop and water bottle."
+Recent actions: ["forward", "forward", "slight_left"]
+State: Searching. Target: "water bottle"
+JSON ONLY in your answer.
 ```
 
-Gemini responds with a **JSON plan**:
-
-```json
-[
-  {"action": "forward",  "speed": 120, "duration_ms": 2000},
-  {"action": "speak",    "text": "Moving forward"},
-  {"action": "left",     "speed": 100, "duration_ms": 5000},
-  {"action": "stop",     "speed": 0,   "duration_ms": 0}
-]
-```
-
-The Pi executes each step, checking sensors and the cancel flag between steps. The ESP32 only ever receives simple one-action commands — all intelligence stays on the Pi.
+The validator then ensures:
+1. Action ∈ {forward, backward, left, right, slight_left, slight_right, stop}
+2. Speed ∈ ℤ ∩ [0, 255]
+3. Any failure → `{"action": "stop", "speed": 0}`
 
 ---
 
@@ -314,7 +264,6 @@ The Pi executes each step, checking sensors and the cancel flag between steps. T
 ```bash
 python3 -c "import pyaudio; pa=pyaudio.PyAudio(); [print(i, pa.get_device_info_by_index(i)['name']) for i in range(pa.get_device_count())]"
 ```
-Find your earphone mic index and set `KANDA_MIC_INDEX=N` (add to config if needed).
 
 **ESP32 not found**
 ```bash
@@ -327,38 +276,6 @@ sudo chmod 666 /dev/ttyUSB0
 libcamera-hello --timeout 2000
 ```
 
-**espeak not producing sound**
-```bash
-pactl list sinks short   # check Bluetooth sink appears
-espeak-ng "hello"        # test directly
-```
-
-**Test each module standalone**
-```bash
-python3 camera.py        # captures test_capture.jpg
-python3 vlm.py           # describes a frame
-python3 mic.py           # records test_vad.wav
-python3 speaker.py       # speaks test phrases
-python3 wake_word.py     # tests wake detection
-python3 voice_command.py # transcription test
-```
-
----
-
-## OLED Face States
-
-| What KANDA is doing | Face |
-|---------------------|------|
-| Idle / waiting | Two eyes, slow blink every 3s |
-| Listening | Wide eyes, raised eyebrows |
-| Thinking | Eyes scanning left and right |
-| Acting (single command) | Squinted determined eyes |
-| Searching (find task) | One eye squinted, one wide |
-| Speaking | Eyes open, mouth opens/closes |
-| Found it | Big smile |
-| Couldn't find it | Sad face |
-| Obstacle blocked | Wide eyes + ! |
-
 ---
 
 ## Project Phases
@@ -367,8 +284,8 @@ python3 voice_command.py # transcription test
 |-------|--------|-------------|
 | 1 — Conceptual Design | ✅ Done | Problem formulation, architecture proposal |
 | 2 — Embodiment Layer | ✅ Done | ESP32 + motors + sensors + obstacle avoidance |
-| 3 — Intelligence Layer | ✅ Done | Raspberry Pi + Gemini LLM + serial bridge |
-| 4 — Multimodal Agent | ✅ Done | Vision + voice + wake word + task planning |
+| 3 — Intelligence Layer | ✅ Done | Raspberry Pi + LLM + serial bridge |
+| 4 — Multimodal Agent | ✅ Done | Vision + voice + wake word + Telegram + safety |
 
 ---
 
