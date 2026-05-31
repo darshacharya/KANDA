@@ -19,14 +19,15 @@
 \usepackage{graphicx}
 \graphicspath{{images/}}
 \usepackage{amsmath,amssymb}
-\usepackage{booktabs}                     % nice tables
+% \usepackage{booktabs}                   % removed — using \hline with full grid borders
+\setlength{\arrayrulewidth}{0.5pt}         % visible cell borders
+\renewcommand{\arraystretch}{1.3}          % row padding for bordered tables
 \usepackage{longtable}                    % multi-page tables
 \usepackage{array}
 \usepackage{tabularx}
-\usepackage{xltabular}     
-\usepackage{float}  % multi-page tabularx
+\usepackage{float}
 \usepackage{enumitem}                     % custom lists
-\usepackage{xurl}                         % breakable URLs/paths (must load before hyperref)
+\usepackage{url}                          % breakable URLs/paths (must load before hyperref)
 \makeatletter
 \g@addto@macro\UrlBreaks{\do\_}           % allow breaks at underscores inside \url/\path
 \makeatother
@@ -34,9 +35,10 @@
 \usepackage{listings}                     % code blocks
 \usepackage{xcolor}
 \usepackage{caption}
+\captionsetup{labelfont=bf}
 \usepackage{titlesec}                     % chapter/section styling
 \usepackage{tocloft}                      % ToC formatting
-\usepackage[numbers]{natbib}              % numeric cites (matches \bibliographystyle{ieeetr})
+\usepackage[numbers,sort&compress]{natbib} % numeric cites, sorted by year (newest first)
 
 % ---------- TOC TITLE FORMATTING ----------
 \renewcommand{\cfttoctitlefont}{\hfill\fontsize{18}{22}\selectfont\bfseries}
@@ -67,7 +69,7 @@
 \setlength{\parskip}{6pt}
 
 % Project metadata
-\newcommand{\ProjectTitle}{A Multimodal Embodied Robot Agent Powered by LLMs with Hardware Aware Action Generation}
+\newcommand{\ProjectTitle}{A Multimodal Embodied Robot Agent Driven by Large Language Models for Hardware-Conscious Command Generation}
 \newcommand{\ShortTitle}{Multimodal Embodied Robot Agent}
 \newcommand{\StudentName}{Sudarshan T S}
 \newcommand{\USN}{1RV24SIT14}
@@ -82,10 +84,12 @@
 \fancyhf{}
 \renewcommand{\headrulewidth}{3pt}
 \renewcommand{\footrulewidth}{3pt}
-% Redefine chaptermark to only store chapter title (no "Chapter N.")
-\renewcommand{\chaptermark}[1]{\markboth{#1}{}}
+% Redefine chaptermark to store "Chapter N"
+\renewcommand{\chaptermark}[1]{\markboth{Chapter\ \thechapter}{}}
 % Suppress sectionmark so it doesn't override the header
 \renewcommand{\sectionmark}[1]{}
+% Force header/footer on chapter-opening pages too
+\fancypagestyle{plain}{\pagestyle{fancy}}
 % Left header: chapter name only  |  Right header: short project title
 \fancyhead[L]{\small\leftmark}
 \fancyhead[R]{\small\ShortTitle}
@@ -128,7 +132,7 @@
 
 \lstdefinestyle{pythonstyle}{
   backgroundcolor=\color{codebg},
-  basicstyle=\ttfamily\footnotesize,
+  basicstyle=\itshape\footnotesize,
   breaklines=true,
   captionpos=b,
   commentstyle=\color{codegreen},
@@ -149,13 +153,14 @@
 % ================================================================
 \begin{document}
 
+% Inject column headers into LoF and LoT files
+\addtocontents{lof}{\protect\noindent\protect\makebox[1.5em][l]{\textbf{Sl. No.}}\protect\hfill\textbf{Title}\protect\hfill\textbf{Page No.}\par\vspace{6pt}}
+\addtocontents{lot}{\protect\noindent\protect\makebox[1.5em][l]{\textbf{Sl. No.}}\protect\hfill\textbf{Title}\protect\hfill\textbf{Page No.}\par\vspace{6pt}}
+
 % ---- Front Matter (roman numerals, first 5 pages empty) ----
 \pagenumbering{roman}
 \pagestyle{empty}
 \input{chapters/00_prelims}
-
-\listoffigures
-\listoftables
 \clearpage
 
 % ---- Main Chapters (arabic numerals, full header/footer) ----
@@ -166,7 +171,8 @@
   \fancyhf{}
   \renewcommand{\headrulewidth}{3pt}
   \renewcommand{\footrulewidth}{3pt}
-  \fancyhead[C]{\hspace{0pt}}% force header rule
+  \fancyhead[L]{\small\leftmark}
+  \fancyhead[R]{\small\ShortTitle}
   \fancyfoot[L]{\small M.Tech in Information Technology}
   \fancyfoot[C]{\small\AcademicYear}
   \fancyfoot[R]{\small\thepage}
@@ -182,7 +188,11 @@
 \input{chapters/chapter9}
 
 % ---- References ----
-\bibliographystyle{ieeetr}
+\bibliographystyle{unsrtnat}
 \bibliography{references}
+
+% ---- Annexures ----
+\appendix
+\input{chapters/annexures}
 
 \end{document}

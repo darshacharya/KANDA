@@ -2,53 +2,98 @@
 %  Chapter 9 — Conclusion (KANDA)
 %  Knowledge-driven Autonomous Navigation and Decision-making Agent
 % ================================================================
-\chapter{Conclusion}
+\chapter{CONCLUSION}
 \label{ch:conclusion}
 
-This final chapter wraps things up. We look back at what we set out to do in Chapter 1 and show where in the report we actually did it. We highlight the most important things we learned. We reflect on the engineering choices that worked really well. And we point the door toward future work.
+This chapter ties together what I set out to do, what actually happened when I built it, and what I would do differently next time. I also point toward work that could extend KANDA beyond its current capabilities.
 
 %-------------------------------------------------------------------
 \section{Fulfilment of Objectives}
 \label{sec:objective_fulfilment}
 
-We set out with six major goals in Chapter 1. Table~\ref{tab:objectives_map} shows where in this report we actually built and tested each one. Everything was covered: the dual-processor design, the safety layer, the dual-mode fallback firmware, and the multimodal stuff---all tested and all working.
+Chapter~1 defined six objectives. \textbf{Table~\ref{tab:objectives_map}} traces each one to the chapters where it was designed, implemented, and tested. Every objective has been met within the scope defined: dual-processor architecture, body-context grounding, safety validation, dual-mode firmware, commodity-hardware demonstration, and scenario-based evaluation.
+
+\begin{table}[H]
+\centering
+\caption[Objective fulfilment traceability.]{\textbf{Objective fulfilment traceability.}}
+\label{tab:objectives_map}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|c|X|c|c|c|}
+\hline
+\textbf{Obj.} & \textbf{Description} & \textbf{Design} & \textbf{Impl.} & \textbf{Test} \\
+\hline
+1 & Dual-processor architecture (ESP32 + Pi) & Ch.~4 & Ch.~6 & Ch.~7 \\
+\hline
+2 & Hardware-aware context builder & Ch.~5 & Ch.~6 & Ch.~8 \\
+\hline
+3 & Safety validation layer & Ch.~4,5 & Ch.~6 & Ch.~7,8 \\
+\hline
+4 & Dual-mode firmware (AI/AUTO) & Ch.~4 & Ch.~6 & Ch.~7 \\
+\hline
+5 & Commodity hardware demonstration & Ch.~3 & Ch.~6 & Ch.~8 \\
+\hline
+6 & Scenario-based evaluation & Ch.~5 & Ch.~6 & Ch.~8 \\
+\hline
+\end{tabularx}
+\end{table}
 
 %-------------------------------------------------------------------
 \section{Key Findings}
 \label{sec:key_findings}
 
-What we discovered:
+Five results stood out during the project:
 
 \begin{enumerate}[nosep]
-  \item \textbf{You can build a smart talking robot for under \$70.} Voice, camera, reasoning, and motors all work together on cheap hardware with no GPU or custom AI training needed.
+  \item Commodity hardware suffices. Voice, vision, text reasoning, and motor control all run on parts totalling under \$77. No GPU, no custom training, no proprietary robotic platform. The ESP32 handles sensing and actuation; the Pi handles orchestration; the cloud handles heavy inference.
 
-  \item \textbf{Multiple safety layers are essential.} Our tests showed that no single check is enough. Prompt grounding helps, but so does the validator, and so does the emergency stop in firmware. They each catch different problems.
+  \item No single safety layer is enough. Ablation showed distinct failure modes for each removed layer (\textbf{Table~\ref{tab:ablation_ch8}}). Prompt grounding prevents 15\% of unsafe plans; the validator catches 42\% of structurally bad outputs; the firmware reflex prevents 30\% of near-miss collisions. Remove any one, and a class of failures returns.
 
-  \item \textbf{Remembering where you've been is crucial.} When we turned off the robot's memory, it kept going to the same places over and over (60\% of search steps). With memory and a smart threshold system, it explores effectively.
+  \item Episodic memory transforms search. Without it, the robot revisited the same scene in 60\% of search steps, effectively halving its coverage. With the similarity threshold and adaptive lowering, zero revisits occurred across all successful trials.
 
-  \item \textbf{Vision helps the robot make smart decisions.} When we removed camera descriptions from what the robot knows about itself, it drove into obstacles 15\% more often---that's a real impact.
+  \item Scene descriptions in the prompt matter. Removing VLM descriptions from the body context increased forward-into-obstacle plans by 15\%. The model uses scene text to make navigation decisions that pure distance numbers alone cannot justify.
 
-  \item \textbf{The seven-state machine keeps things predictable.} By controlling when the microphone, camera, and speaker are active, we avoid conflicts and make cancellation work from anywhere in the system.
+  \item The state machine keeps complexity manageable. Seven states with a global cancel mechanism made it possible to add wake-word detection, TTS, Telegram, and visual search without any of them blocking reflex handling or creating race conditions.
 \end{enumerate}
 
 %-------------------------------------------------------------------
-\section{Reflections}
+\section{Engineering Reflections}
 \label{sec:reflections}
 
-Four things that made the project work:
+Several design choices paid dividends beyond what I expected:
 
-\textbf{Strict communication protocol.} Using newline-delimited JSON messages (one complete object per line, fixed sensor format) saved us days of debugging. When we needed to add the display state later, no changes to the protocol were needed.
+Newline-delimited JSON everywhere. One complete message per line, human-readable in any serial monitor. When half the integration bugs were swapped TX/RX wires or wrong baud rates, being able to read raw bytes in minicom saved hours. Adding the display-state field to telemetry later required zero protocol changes.
 
-\textbf{Separating fast and slow.} The ESP32 senses and reacts at 10 Hz. Gemini runs at maybe 0.3 Hz because it's slow. Accepting that Gemini is advisory---not in control moment-to-moment---changed everything about the safety design.
+The cloud LLM is advisory, not authoritative. It suggests actions at roughly 0.3\,Hz. The firmware senses at 10\,Hz. Treating inference as a slow outer loop that the fast inner loop can override at any time eliminated an entire class of timing hazards. I never had to solve the ``what if the API hangs'' problem beyond a simple timeout.
 
-\textbf{Validator before LLM.} We built the command validator first, before the language model client. This let us experiment with prompts aggressively without worrying about the motors doing something weird. The validator was the gate.
 
-\textbf{Incremental builds.} Phase 2 (basic rule-based avoidance) worked as a standalone robot. Phase 3 added voice and vision. Phase 4 added the full reasoning layer. Each step built on a working system. When things broke, we knew where the problem was.
+Build the validator before the LLM client. I wrote and tested the safety validator in the first week of Phase~3, before the Groq client existed. This meant every subsequent prompt experiment was safe by construction; I could feed deliberately adversarial outputs to the validator and confirm that nothing dangerous passed. It also made switching from Gemini to Groq to NVIDIA a one-file change with no safety implications.
+
+
+Incremental delivery. Phase~2 produced a working obstacle-avoidance robot with no Pi, no cloud, no AI. Phase~3 added intelligence on top of a known-good base. Phase~4 added multimodal inputs on top of a known-good intelligence layer. When something broke, the fault was always in the newest layer. This made debugging tractable on a two-person team.
+
+%-------------------------------------------------------------------
+\section{Limitations}
+\label{sec:limitations}
+
+KANDA has clear boundaries. Three ultrasonic sensors leave angular blind spots; objects at oblique angles go undetected. There is no odometry, so the robot has no metric position estimate. The single 3$\times$4\,m test room does not demonstrate scalability to larger environments. Cloud dependency means no reasoning without Wi-Fi. The wake-word model was tested only in quiet ($<$40\,dB) conditions. Ablation used $n{=}10$ per condition, which limits statistical power. And there was no inter-rater reliability check on intent labelling; both authors coded the same trials.
+
+%-------------------------------------------------------------------
+\section{Future Work}
+\label{sec:future}
+
+\begin{itemize}[nosep]
+  \item On-device model: A quantised Gemma 2B or Phi-3 Mini on the Pi could provide sub-500\,ms inference without cloud dependency.
+  \item Depth camera: An Intel RealSense or OAK-D Lite would replace ultrasonic blind spots with dense point clouds.
+  \item Wheel encoders: Even simple optical encoders would enable dead-reckoning and allow the LLM to reason about distances travelled.
+  \item SLAM: With a depth camera and encoders, lightweight visual SLAM could give the robot a map and enable ``go to the kitchen'' commands.
+  \item Multi-room evaluation: Larger spaces with doorways, corridors, and dynamic obstacles would stress-test the search algorithm and safety layers.
+  \item Formal verification: The validator is simple enough to prove correct with property-based testing or model checking against temporal safety policies.
+\end{itemize}
 
 %-------------------------------------------------------------------
 \section{Closing Remarks}
 \label{sec:ch9closing}
 
-KANDA proves that you can run real multimodal AI on a mobile robot on a shoestring budget. The voice, vision, reasoning, and motion all work together. Safety depends on layering: the prompt keeps the LLM honest, the validator catches bad commands, and the firmware has its own reflexes. It's not perfect---the robot still sometimes misunderstands voice or gets stuck---but it's credible. Future work (local models, better sensors, SLAM, formal verification) will use the same architecture.
+KANDA started as a question (can you make a \$77 robot that listens, sees, thinks, and avoids walls?) and ended as a working multimodal agent with 0.94 intent F1, 80\% visual search success, and zero sustained unsafe motion across all fault injections. The architecture is not novel in any single layer; what it contributes is the integration: a cloud LLM, a deterministic validator, and a firmware reflex, layered so that each compensates for the others' weaknesses, running on hardware cheap enough that a student can build one in a weekend.
 
-If you're building something similar, don't skip the serial protocol engineering, the level shifters, and the firmware safety layer. Do those right, and everything else becomes iterative instead of catastrophic.
+If there is one takeaway from this project, it is that safety in embodied AI comes from structural separation of concerns, not from making the model smarter. The model will always hallucinate sometimes. The validator catches syntax. The firmware catches physics. Together they make the system trustworthy enough to let it drive around a room unsupervised.

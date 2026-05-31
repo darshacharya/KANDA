@@ -1,0 +1,17 @@
+[Unit]
+Description=KANDA Embodied AI Agent
+After=network-online.target bluetooth.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rasp
+WorkingDirectory=/home/rasp/Downloads/vision_module
+ExecStartPre=/bin/sleep 5
+ExecStart=/home/rasp/Downloads/vision_module/venv/bin/python3 main.py
+Restart=on-failure
+RestartSec=10
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=multi-user.target

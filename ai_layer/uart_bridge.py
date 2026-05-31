@@ -80,15 +80,22 @@ class UARTBridge:
 def _parse_telemetry(line: str) -> dict | None:
     """
     Parse ESP32 telemetry line.
-    Expected format:  F:45.20 L:30.10 R:80.50 -> FORWARD
-    Returns:          {"front": 45.2, "left": 30.1, "right": 80.5, "action": "FORWARD"}
+    Handles both formats:
+      F:45.20 L:30.10 R:80.50 -> FORWARD   (no space after colon)
+      F: 45.20 L: 30.10 R: 80.50 -> FORWARD (space after colon)
+    Returns: {"front": 45.2, "left": 30.1, "right": 80.5, "action": "FORWARD"}
     """
     try:
         parts, action_part = line.split("->")
+        # Normalise "F: 43.10" → "F:43.10" then split on whitespace
+        normalised = parts.replace(": ", ":").replace(":  ", ":")
         def extract(key):
-            for tok in parts.split():
-                if tok.startswith(key + ":"):
-                    return float(tok.split(":")[1])
+            for tok in normalised.split():
+                if tok.upper().startswith(key + ":"):
+                    try:
+                        return float(tok.split(":")[1])
+                    except ValueError:
+                        pass
             return -1.0
 
         return {

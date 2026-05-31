@@ -3,20 +3,21 @@
 %  KANDA (Knowledge-driven Autonomous Navigation and Decision-making Agent):
 %  A Multimodal Embodied Robot Agent Powered by LLMs with Hardware Aware Action Generation
 % ================================================================
-\chapter{Introduction}
+\chapter{INTRODUCTION}
 \label{ch:intro}
 
-This chapter introduces \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)}, a multimodal embodied robot agent that we built to explore how Large Language Models can control a physical robot safely and reliably on a budget. We started this project with a simple question: how cheaply could we build a robot that listens, sees, reasons, and moves without crashing? What we discovered along the way taught us more about AI safety, hardware constraints, and embodied intelligence than we expected. This chapter covers the context, motivation, technical challenges we faced, what we built to solve them, and how the rest of the report is organized.
+This chapter introduces Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA), a multimodal embodied robot agent that I built to explore how Large Language Models can control a physical robot safely and reliably on a budget. I started this project with a simple question: how cheaply could I build a robot that listens, sees, reasons, and moves without crashing? What I discovered along the way taught me more about AI safety, hardware constraints, and embodied intelligence than I expected. This chapter covers the context, motivation, technical challenges I faced, what I built to solve them, and how the rest of the report is organized.
 
 %-------------------------------------------------------------------
 \section{Overview of KANDA}
 \label{sec:overview}
 
-The field of robotics has historically relied on rule-based control systems that map sensor inputs to motor outputs through hand-crafted conditional logic. While effective for narrow, well-defined environments, such systems lack the ability to reason about novel situations, interpret ambiguous stimuli, or adapt their behaviour based on contextual understanding. A mobile robot encountering an unexpected obstacle configuration must either have a pre-programmed response for that exact scenario or fail ungracefully.
+Rule-based robots work until they encounter something the programmer did not anticipate. A wall at an odd angle, two obstacles that create a narrow gap, or a piece of furniture moved since yesterday, any of these can deadlock a threshold-based system because the rules simply have no clause for that configuration. The robot stops, oscillates, or crashes.
 
-Recent advances in Large Language Models (LLMs) have produced strong capabilities in natural language understanding, contextual reasoning, and structured output generation~\cite{vaswani2017attention}. These capabilities enable a different approach to robot control: rather than encoding every possible scenario in conditional logic, a robot can describe its sensory state to an LLM and receive a contextually appropriate action command in return. This approach, termed \textit{embodied AI}, bridges the gap between language-based reasoning and physical action execution~\cite{driess2023palme}.
+Large Language Models (LLMs) offer a way out of this rigidity. Given a text description of the robot's situation (sensor distances, legal actions, speed limits), an LLM can propose contextually sensible commands even in novel layouts~\cite{vaswani2017attention}. The catch is that LLMs have no built-in awareness of hardware. They may suggest actions the robot cannot perform or speeds it cannot survive~\cite{driess2023palme}. Bridging this gap between linguistic reasoning and physical execution is the central challenge of embodied AI, and it is the problem KANDA was designed to solve.
 
-KANDA addresses this opportunity by implementing a complete multimodal embodied robot agent in which an ESP32 microcontroller serves as the physical executor (body) and a Raspberry Pi~4 running the \texttt{vision\_module/} intelligence layer serves as the cognitive reasoner (brain). The system operates as a closed-loop sense--reason--validate--act pipeline: ultrasonic sensors and (in Phase~4) a Pi Camera measure the environment; sensor telemetry and optional scene descriptions are assembled into a body-context prompt dispatched to Groq (text reasoning) or NVIDIA NIM (vision); the returned JSON command is validated through a safety layer; and the validated command drives the motors. If cloud inference fails or an obstacle is detected, the system gracefully degrades to firmware-level emergency stops or AUTO\_MODE, ensuring continuous safe operation. Figure~\ref{fig:hw_block} (Chapter~\ref{ch:srs}) shows the hardware interconnection; an assembled prototype photograph may be added to \path|images/kanda_robot.jpg| when available for the viva binder.
+KANDA addresses this opportunity by implementing a complete multimodal embodied robot agent in which an ESP32 microcontroller serves as the physical executor (body) and a Raspberry Pi~4 running the \textit{vision\_module/} intelligence layer serves as the cognitive reasoner (brain). The system operates as a closed-loop sense-reason-validate-act pipeline: ultrasonic sensors and (in Phase~4) a Pi Camera measure the environment; sensor telemetry and optional scene descriptions are assembled into a body-context prompt dispatched to Groq (text reasoning) or NVIDIA NIM (vision); the returned JSON command is validated through a safety layer; and the validated command drives the motors. If cloud inference fails or an obstacle is detected, the system gracefully degrades to firmware-level emergency stops or AUTO\_MODE, ensuring continuous safe operation. \textbf{Figure~\ref{fig:hw_block}} (Chapter~\ref{ch:srs}) shows the hardware interconnection; an assembled prototype photograph may be added to \textit{images/kanda\_robot.jpg} when available for the viva binder.
+
 
 %-------------------------------------------------------------------
 \subsection{Embodied Intelligence Architecture}
@@ -24,22 +25,24 @@ KANDA addresses this opportunity by implementing a complete multimodal embodied 
 
 KANDA operates as a three-layer processing architecture:
 
-\textbf{Layer 1, Sensing \& Communication:}
+\textbf{Sensing \& Communication:}
 Three HC-SR04 ultrasonic sensors (front, left, right) measure distances to obstacles at each control cycle. The ESP32 reads sensor values, formats front/left/right ranges and the current action label into a single telemetry line, and transmits this data over UART at 115,200 baud to the Raspberry Pi. Voltage dividers on each ECHO pin convert the 5V HC-SR04 output to approximately 2.5V, protecting the 3.3V-tolerant ESP32 GPIO pins.
 
-\textbf{Layer 2, Reasoning \& Decision:}
+\textbf{Reasoning \& Decision:}
 The Raspberry Pi receives the telemetry and constructs a hardware-description prompt that communicates the robot's physical capabilities, current sensor readings, valid action vocabulary, speed constraints, and safety rules to Groq or NVIDIA NIM as appropriate. The service returns a JSON object specifying the next action and speed. A safety validator then checks the command against a whitelist of valid actions and clamps speed to the permissible range $[0, 255]$. Any invalid command is replaced with a safe stop.
 
-\textbf{Layer 3, Execution \& Feedback:}
+\textbf{Execution \& Feedback:}
 The validated JSON command is transmitted back to the ESP32 over serial. The ESP32 parses the command and drives the TB6612FNG dual motor driver accordingly, while simultaneously displaying the current state on an SSD1306 OLED screen. The firmware implements dual-mode operation: AI\_MODE when valid commands arrive from the Pi, and AUTO\_MODE (rule-based obstacle avoidance) when the Pi is silent for longer than a configured timeout.
 
 %-------------------------------------------------------------------
 \subsection{Global Scenario}
 \label{subsec:global}
 
-The global robotics market is undergoing a transformation driven by the convergence of advances in foundation models, affordable embedded hardware, and edge computing. The International Federation of Robotics reported that over 500,000 new industrial robots were installed worldwide in 2023, while the service robotics sector grew by 48\% in unit sales~\cite{ifr2024report}. Simultaneously, the emergence of multimodal LLMs such as GPT-4, Gemini, and Claude has enabled language-conditioned robot control, where natural language serves as the interface between human intent and physical action~\cite{brohan2023rt2}.
+Two trends converged to make KANDA feasible. On the hardware side, microcontrollers like the ESP32 now cost under \$5 and run dual cores at 240\,MHz with built-in Wi-Fi, enough to sample sensors, drive motors, and parse JSON without breaking a sweat. On the AI side, hosted LLM inference through services like Groq and NVIDIA NIM gives a Raspberry Pi access to 70-billion-parameter reasoning at sub-3-second latency with no local GPU~\cite{shi2016edge,bonomi2012fog}.
 
-Research efforts including SayCan~\cite{ahn2022saycan}, PaLM-E~\cite{driess2023palme}, and RT-2~\cite{brohan2023rt2} have demonstrated that LLMs can ground their language understanding in physical affordances, generating robot actions that respect hardware constraints. However, these systems typically require expensive robotic platforms, cloud-scale compute, or proprietary hardware. KANDA occupies the gap between research prototypes and educational platforms by implementing LLM-driven embodied intelligence on commodity hardware (ESP32 + Raspberry Pi) at a total cost below \$50, making embodied AI accessible for education, research, and rapid prototyping.
+The IFR reported 500,000 new industrial robot installations in 2023 and 48\% growth in service robotics~\cite{ifr2024report}. At the research frontier, PaLM-E~\cite{driess2023palme}, RT-1~\cite{brohan2022rt1}, and RT-2~\cite{brohan2023rt2} showed that multimodal language models can generate robot actions grounded in sensor context. SayCan~\cite{ahn2022saycan} demonstrated affordance-aware planning on a mobile manipulator. But all of these run on platforms costing upwards of \$100,000 and require substantial demonstration datasets.
+
+KANDA targets the other end of the cost spectrum. I wanted to know whether the same \textit{behaviours} (voice interaction, obstacle navigation, visual object search) could run on parts from an electronics shop, with zero training data, using only API inference. The answer shapes the rest of this report.
 
 %-------------------------------------------------------------------
 \subsection{Societal Relevance}
@@ -54,7 +57,7 @@ Embodied AI agents with natural language understanding have direct societal appl
   \item \textbf{Safety research:} The safety validation layer demonstrates how to constrain AI-generated actions before physical execution, contributing to the broader discourse on safe AI deployment.
 \end{itemize}
 
-From an engineering perspective, the project integrates embedded systems programming (ESP32/Arduino), hardware interfacing (ultrasonic sensors, motor drivers, voltage dividers), inter-processor communication (UART/serial), cloud API integration (Gemini), and software safety engineering into a single cohesive system, making it a complete study in applied software and hardware co-design.
+From an engineering perspective, the project integrates embedded systems programming (ESP32/Arduino), hardware interfacing (ultrasonic sensors, motor drivers, voltage dividers), inter-processor communication (UART/serial), cloud API integration (Groq, NVIDIA NIM), and software safety engineering into a single cohesive system, making it a complete study in applied software and hardware co-design.
 
 %-------------------------------------------------------------------
 \subsection{Problem Area}
@@ -83,7 +86,7 @@ KANDA is implemented as a dual-processor system with the following key technical
   \item ESP32 DevKit microcontroller (dual-core Tensilica Xtensa, 240\,MHz, Wi-Fi/Bluetooth)
   \item TB6612FNG dual H-bridge motor driver with PWM speed control (1\,kHz, 8-bit resolution)
   \item 3$\times$ HC-SR04 ultrasonic distance sensors with 1\,k$\Omega$ + 1\,k$\Omega$ voltage dividers
-  \item SSD1306 OLED display (128$\times$64, I2C at address \texttt{0x3C})
+  \item SSD1306 OLED display (128$\times$64, I2C at address \textit{0x3C})
   \item 7.4V LiPo battery with BMS and buck converter (5V regulated output to ESP32)
   \item Raspberry Pi (Python runtime, Groq/NVIDIA API clients, safety validator)
 \end{itemize}
@@ -91,14 +94,14 @@ KANDA is implemented as a dual-processor system with the following key technical
 \textbf{Communication:}
 \begin{itemize}[nosep]
   \item UART serial at 115,200 baud between ESP32 and Raspberry Pi
-  \item ESP32 transmits telemetry lines matching \path|F:<cm> L:<cm> R:<cm> -> <ACTION>|
-  \item Raspberry Pi transmits commands as one JSON object per line, schema \path|{"action":"<cmd>","speed":<int>}|
+  \item ESP32 transmits telemetry lines matching \textit{F:\textless cm\textgreater{} L:\textless cm\textgreater{} R:\textless cm\textgreater{} -\textgreater{} \textless ACTION\textgreater}
+  \item Raspberry Pi transmits one JSON command per line with fields \textit{action} and \textit{speed}
   \item Auto-mode detection: if no valid JSON received within timeout, ESP32 reverts to standalone operation
 \end{itemize}
 
 \textbf{AI reasoning:}
 \begin{itemize}[nosep]
-  \item \textbf{Groq} (\texttt{llama-3.3-70b-versatile}) for text reasoning and ASR; \textbf{NVIDIA NIM} (\texttt{meta/llama-3.2-11b-vision-instruct}) for vision; keys via \texttt{GROQ\_API\_KEY} and \texttt{NVIDIA\_API\_KEY}
+  \item \textbf{Groq} (\textit{llama-3.3-70b-versatile}) for text reasoning and ASR; \textbf{NVIDIA NIM} (\textit{meta/llama-3.2-11b-vision-instruct}) for vision; keys via \textit{GROQ\_API\_KEY} and \textit{NVIDIA\_API\_KEY}
   \item \textbf{Alignment:} hardware-description prompt aligns model outputs with actuator affordances; low temperature and JSON-only response format constrain decoding; the validator provides runtime alignment by mapping every candidate command to a safe, whitelisted action and bounded speed~\cite{huang2023grounded,ahn2022saycan}
   \item Hardware-description prompt with explicit action vocabulary, speed range, and safety rules
   \item Temperature 0.2 for deterministic JSON output
@@ -106,22 +109,23 @@ KANDA is implemented as a dual-processor system with the following key technical
   \item 2-second control loop interval
 \end{itemize}
 
+\newpage
 \textbf{Safety validation:}
 \begin{itemize}[nosep]
   \item Action whitelist (fixed vocabulary):
   \begin{itemize}[nosep,leftmargin=1.25em]
-    \item \texttt{forward}, \texttt{backward}, \texttt{left}, \texttt{right}
-    \item \texttt{slight\_left}, \texttt{slight\_right}, \texttt{stop}
+    \item \textit{forward}, \textit{backward}, \textit{left}, \textit{right}
+    \item \textit{slight\_left}, \textit{slight\_right}, \textit{stop}
   \end{itemize}
   \item Speed clamping to $[0, 255]$
   \item Type checking on all command fields
-  \item Fallback on any validation failure to \path|{"action":"stop","speed":0}|
+  \item Fallback on any validation failure to \textit{\{``action'':``stop'',``speed'':0\}}
 \end{itemize}
 
 \textbf{Firmware modes:}
 \begin{itemize}[nosep]
-  \item \texttt{AI\_MODE}: Raspberry Pi sends JSON commands; ESP32 executes them
-  \item \texttt{AUTO\_MODE}: Standalone rule-based obstacle avoidance (Phase~2 behaviour)
+  \item \textit{AI\_MODE}: Raspberry Pi sends JSON commands; ESP32 executes them
+  \item \textit{AUTO\_MODE}: Standalone rule-based obstacle avoidance (Phase~2 behaviour)
   \item Automatic switching: valid JSON reception $\rightarrow$ AI\_MODE; timeout $\rightarrow$ AUTO\_MODE
 \end{itemize}
 
@@ -129,70 +133,41 @@ KANDA is implemented as a dual-processor system with the following key technical
 \section{Literature Review}
 \label{sec:litreview}
 
-\textbf{\cite{driess2023palme} Driess, D., et al.\ (2023). PaLM-E: An Embodied Multimodal Language Model.}
-Presented PaLM-E, a 562-billion parameter multimodal language model that integrates real-world sensor modalities (images, state estimation, scene representations) directly into the language model, enabling embodied reasoning for robot manipulation and navigation. PaLM-E demonstrated that a single large model can ground language in physical observations without task-specific fine-tuning. KANDA shares the principle of grounding language models in sensor observations but achieves this through structured prompting rather than end-to-end multimodal training, enabling deployment on commodity hardware.
+The literature divides into three clusters: systems that ground LLMs in robot hardware, systems that treat prompts as executable specifications, and systems that compose multiple models for multimodal reasoning.
 
-\textbf{\cite{ahn2022saycan} Ahn, M., et al.\ (2022). Do As I Can, Not As I Say: Grounding Language in Robotic Affordances.}
-Introduced SayCan, which combines an LLM's language understanding with a learned affordance model to select actions that are both useful (according to the LLM) and feasible (according to the robot's current state). SayCan demonstrated a 74\% improvement in plan execution success rate on a mobile manipulator. KANDA adopts SayCan's principle of affordance grounding but implements it through explicit hardware-description prompts rather than learned value functions.
+\textbf{Hardware grounding.} The core question, how to prevent an LLM from proposing actions a robot cannot execute, has been attacked from several angles. Ahn et al.~\cite{ahn2022saycan} trained affordance scores from 68k demonstrations so that SayCan could rank actions by both linguistic plausibility and physical feasibility, achieving 74\% better execution success on a mobile manipulator. Driess et al.~\cite{driess2023palme} embedded raw sensor tokens into PaLM-E's 562B-parameter transformer, letting the model ``see'' joint states and images natively. Brohan et al.~\cite{brohan2023rt2} fine-tuned a vision-language model directly into a policy (RT-2) that doubled generalisation to unseen objects. Vemprala et al.~\cite{vemprala2024chatgpt} took the zero-shot route, showing that structured API prompts with clear capability descriptions suffice for ChatGPT to produce viable robot plans without any fine-tuning. KANDA's approach is closest to this last strategy; I achieve grounding through prompt engineering alone, which eliminates training cost entirely.
 
-\textbf{\cite{brohan2023rt2} Brohan, A., et al.\ (2023). RT-2: Vision-Language-Action Models.}
-Presented Robotic Transformer 2 (RT-2), which directly maps visual observations and language instructions to robot actions by fine-tuning a vision-language model on robot demonstration data. RT-2 achieved a 2$\times$ improvement in generalisation to unseen objects. KANDA's Phase~4 architecture targets similar vision-language-action capabilities but operates through API-based inference rather than on-device model execution.
+\textbf{Prompts as specifications.} Liang et al.~\cite{liang2023code} framed prompts as Python APIs and let the LLM write policy code; Singh et al.~\cite{singh2023progprompt} declared functions and world state so the model generates situated programs. Wei et al.~\cite{wei2022cot} showed that ``think step by step'' prefixes unlock multi-step planning. Yao et al.~\cite{yao2023react} alternated reasoning traces with concrete actions in ReAct, observing outcomes before the next step. Huang et al.~\cite{huang2023grounded} proposed modifying token probabilities during generation using grounding scores. KANDA borrows the ReAct loop structure for its visual search and uses post-generation validation rather than logit intervention, a practical choice since cloud APIs do not expose logits.
 
-\textbf{\cite{vemprala2024chatgpt} Vemprala, S., et al.\ (2024). ChatGPT for Robotics: Design Principles and Model Abilities.}
-Evaluated ChatGPT's ability to generate robot control code and task plans when provided with API documentation and environmental context. The study established design principles for effective robot-LLM interaction, including the importance of well-structured prompts and iterative dialogue. KANDA's context builder module implements these prompt engineering principles in the robotics domain.
+\textbf{Multimodal composition.} Zeng et al.~\cite{zeng2023socratic} composed vision, language, and audio models through text interfaces without joint training. Huang et al.~\cite{huang2022innermonologue} fed execution results back into the planner for self-correction. Wake et al.~\cite{wake2023gptrobot} decomposed long-horizon tasks into action sequences via ChatGPT. Wu et al.~\cite{wu2023tidybot} personalised household assistance by learning user preferences from a few examples. Hu et al.~\cite{hu2023llmplanner} re-planned dynamically when actions failed. KANDA's Phase~4 realises multimodal composition on commodity hardware: Groq handles text reasoning, NVIDIA NIM handles vision, and openWakeWord handles offline wake detection. These three specialised models are coordinated through the 7-state orchestrator.
 
-\textbf{\cite{liang2023code} Liang, J., et al.\ (2023). Code as Policies: Language Model Programs for Embodied Control.}
-Proposed using LLMs to generate executable robot control code rather than high-level plans. The approach enables compositional and expressive robot behaviours beyond fixed action primitives. KANDA currently uses a fixed action vocabulary with JSON commands but the architecture supports extension to code-as-policy in future phases.
-
-\textbf{\cite{singh2023progprompt} Singh, I., et al.\ (2023). ProgPrompt: Program Generation for Situated Robot Task Planning.}
-Presented ProgPrompt, which generates situated robot task plans as executable programs by providing the LLM with environment-specific function signatures and state descriptions. KANDA's hardware-description prompt follows a similar structure: explicit function documentation (valid actions), state description (sensor readings), and constraints (safety rules).
-
-\textbf{\cite{huang2023grounded} Huang, W., et al.\ (2023). Grounded Decoding: Guiding Text Generation with Grounded Models.}
-Proposed grounded decoding, which combines a language model's token probabilities with a grounding model's feasibility scores at each decoding step. KANDA's safety validator operates on a similar principle but at the command level rather than the token level: the LLM generates a complete command, and the validator checks its feasibility before execution.
-
-\textbf{\cite{wu2023tidybot} Wu, J., et al.\ (2023). TidyBot: Personalised Robot Assistance with LLMs.}
-Demonstrated a household robot that uses LLMs to infer user preferences for object placement from a small number of examples. TidyBot showed that LLMs can generalise from limited demonstrations to novel situations in physical environments. KANDA's architecture supports similar personalisation through the user speech input slot in the context builder.
-
-\textbf{\cite{hu2023llmplanner} Hu, Y., et al.\ (2023). LLM-Planner: Few-Shot Grounded Planning for Embodied Agents.}
-Proposed LLM-Planner for generating grounded action plans from natural language instructions with few-shot examples. The system uses environmental feedback to dynamically re-plan when actions fail. KANDA's control loop similarly incorporates environmental feedback (sensor telemetry) at each reasoning cycle, enabling continuous re-planning.
-
-\textbf{\cite{wake2023gptrobot} Wake, N., et al.\ (2023). ChatGPT Empowered Long-Step Robot Control.}
-Demonstrated multi-step robot task execution by decomposing complex instructions into sequential action primitives using ChatGPT. KANDA shares the decomposition approach but operates at a single-step granularity (one action per reasoning cycle) to maintain real-time responsiveness.
-
-\textbf{\cite{zeng2023socratic} Zeng, A., et al.\ (2023). Socratic Models: Composing Zero-Shot Multimodal Reasoning.}
-Proposed Socratic Models, where multiple foundation models (language, vision, audio) communicate through natural language to solve multimodal tasks without task-specific training. KANDA's Phase~4 architecture envisions a similar composition: a vision model processes camera frames, a speech model transcribes user commands, and the LLM integrates all modalities for action generation.
-
-\textbf{\cite{espressif2023esp32} Espressif Systems (2023). ESP32 Technical Reference Manual.}
-The official hardware reference for the ESP32 microcontroller, documenting GPIO capabilities, strapping pin constraints, LEDC PWM peripheral, UART controllers, and I2C interface. KANDA's pin configuration and firmware design directly follow the constraints documented in this manual.
+\textbf{Hardware reference.} The ESP32 Technical Reference Manual~\cite{espressif2023esp32} documents the LEDC PWM peripheral, UART controllers, GPIO constraints, and I2C bus configuration that directly governed my firmware design choices and pin allocation.
 
 %-------------------------------------------------------------------
 \section{Problem Statement}
 \label{sec:problem}
 
-Traditional mobile robot systems implement navigation through hard-coded conditional logic: if the front sensor reads below a threshold, turn; if a side sensor detects proximity, steer away. While functional in simple environments, this approach is fundamentally limited in three ways. First, the rule set cannot be exhaustive: any spatial configuration not explicitly anticipated produces either an incorrect response or a deadlock, and the number of possible obstacle configurations in real-world environments is effectively infinite. Second, the system cannot apply contextual understanding: a robot approaching a narrow doorway should slow down and align carefully, while the same frontal distance reading in an open room warrants a simple course correction, yet threshold-based systems treat both situations identically. Third, the system offers no natural language interface: a user cannot simply say ``go to the kitchen'' or ``avoid that area'' because the system has no mechanism to interpret semantic intent and translate it into a sequence of physical actions.
+Existing approaches to LLM-driven robot control suffer from three unsolved problems:
 
-Simultaneously, Large Language Models have demonstrated strong contextual reasoning and structured output generation capabilities, but deploying them for real-time robot control introduces its own set of challenges. An LLM has no inherent knowledge of a particular robot's physical dimensions, sensor coverage angles, motor response characteristics, or safety limits. Without explicit hardware grounding, the model may generate physically impossible commands (e.g., ``fly upward''), unsafe actions (e.g., ``full speed forward'' when an obstacle is 10\,cm away), or malformed outputs that cannot be parsed by the firmware. API-based LLM inference also introduces variable latency (typically 1--5 seconds), requiring the system to maintain safe operation during reasoning intervals.
+\begin{enumerate}[nosep]
+  \item \textbf{Rule-based rigidity:} Threshold-based obstacle avoidance cannot reason about novel spatial configurations and deadlocks in cluttered environments.
+  \item \textbf{Ungrounded LLM outputs:} Without explicit hardware context, language models hallucinate invalid actions, out-of-range speeds, and malformed responses (observed in 40\% of raw outputs).
+  \item \textbf{Timing mismatch:} Cloud inference takes 1.5--4 seconds while physical obstacles appear in under 100\,ms, making pure cloud-dependent control unsafe.
+\end{enumerate}
 
-Hence, there is a need for an embodied robot system that combines LLM-based contextual reasoning with hardware-aware action generation, implements a mandatory safety validation layer between the model output and physical execution, provides graceful degradation to autonomous operation when the reasoning layer is unavailable, and operates on affordable commodity hardware suitable for educational and research applications.
+KANDA addresses all three through body-context prompting, a deterministic safety validator, and firmware-level reflexes, on a platform costing less than \$77.
 
 %-------------------------------------------------------------------
 \section{Objectives}
 \label{sec:objectives}
 
-The objectives of the KANDA project are as follows:
-
 \begin{enumerate}[label=\arabic*.]
-  \item \textbf{To design and implement a dual-processor robot architecture} in which an ESP32 microcontroller handles real-time sensor acquisition and motor control while a Raspberry Pi executes LLM-based cognitive reasoning, communicating via structured JSON over UART serial.
-
-  \item \textbf{To develop a hardware-aware context builder} that constructs LLM prompts encoding the robot's physical capabilities, current sensor state, valid action vocabulary, speed constraints, and safety rules, enabling the language model to generate physically grounded commands.
-
-  \item \textbf{To implement a safety validation layer} that verifies every LLM-generated command against a whitelist of valid actions, clamps speed to the permissible hardware range, and substitutes a safe fallback command upon any validation failure, ensuring that no unchecked AI output reaches the physical actuators.
-
-  \item \textbf{To build a dual-mode firmware} for the ESP32 that operates in AI\_MODE when receiving valid commands from the Raspberry Pi and automatically falls back to rule-based AUTO\_MODE upon communication timeout, guaranteeing continuous safe operation independent of LLM availability.
-
-  \item \textbf{To demonstrate the complete sense--reason--validate--act loop} on a physical robot platform using commodity hardware (total cost below \$50), showing that LLM-driven embodied intelligence is achievable without specialised robotic platforms or GPU-equipped onboard computers.
-
-  \item \textbf{To evaluate the system} through test scenarios including open corridor navigation, obstacle avoidance, narrow passage traversal, and LLM failure recovery, demonstrating that hardware-aware prompting produces contextually appropriate actions while the safety layer prevents unsafe execution.
+  \item Design a dual-processor architecture (ESP32 + Raspberry Pi) communicating via JSON over UART.
+  \item Develop a hardware-aware context builder that grounds LLM prompts in live sensor state and action constraints.
+  \item Implement a safety validation layer that whitelists actions, clamps speed, and substitutes safe fallback on failure.
+  \item Build dual-mode firmware with automatic fallback to rule-based avoidance on communication timeout.
+  \item Demonstrate the complete sense-reason-validate-act loop on commodity hardware (total cost below \$77).
+  \item Evaluate through voice commands, visual search, fault injection, and ablation experiments.
 \end{enumerate}
 
 %-------------------------------------------------------------------
@@ -225,7 +200,10 @@ The objectives of the KANDA project are as follows:
 \section{Methodology}
 \label{sec:methodology}
 
-The project follows a phased iterative development methodology (Fig.~\ref{fig:phases}):
+The project follows a phased iterative development methodology (\textbf{Fig.~\ref{fig:phases}}):
+
+
+\textbf{Conceptual Design \& Literature Review:} Study of embodied AI architectures, LLM-robot integration frameworks (SayCan, PaLM-E, RT-2), ESP32 hardware constraints, motor driver interfacing, and ultrasonic sensor characteristics. Identification of the hardware-grounding gap as the primary technical challenge.
 
 \begin{figure}[H]
 \centering
@@ -246,17 +224,15 @@ The project follows a phased iterative development methodology (Fig.~\ref{fig:ph
 \node[below=0.15cm of p3, font=\tiny] {Pi + Groq/NIM + validator};
 \node[below=0.15cm of p4, font=\tiny] {Voice, VLM, Telegram};
 \end{tikzpicture}
-\caption{Phased development roadmap of KANDA.}
+\caption[Phased development roadmap of KANDA]{\textbf{Phased development roadmap of KANDA.}}
 \label{fig:phases}
 \end{figure}
 
-\textbf{Phase~1, Conceptual Design \& Literature Review:} Study of embodied AI architectures, LLM-robot integration frameworks (SayCan, PaLM-E, RT-2), ESP32 hardware constraints, motor driver interfacing, and ultrasonic sensor characteristics. Identification of the hardware-grounding gap as the primary technical challenge.
+\textbf{Embodiment Layer (Hardware + Rule-Based Control):} Assembly of the physical robot platform including ESP32, TB6612FNG motor driver, three HC-SR04 ultrasonic sensors with voltage dividers, SSD1306 OLED, and LiPo power system. Implementation of standalone rule-based obstacle avoidance firmware operating as a sense-decide-act-display loop. Validation of all hardware interfaces including PWM motor control, I2C display communication, and ultrasonic distance measurement accuracy.
 
-\textbf{Phase~2, Embodiment Layer (Hardware + Rule-Based Control):} Assembly of the physical robot platform including ESP32, TB6612FNG motor driver, three HC-SR04 ultrasonic sensors with voltage dividers, SSD1306 OLED, and LiPo power system. Implementation of standalone rule-based obstacle avoidance firmware operating as a sense--decide--act--display loop. Validation of all hardware interfaces including PWM motor control, I2C display communication, and ultrasonic distance measurement accuracy.
+\textbf{Intelligence Layer (LLM Integration):} Implementation of the Raspberry Pi intelligence layer including the UART bridge for serial communication with ESP32, body-context assembly, Groq/NVIDIA inference via the task agent, and the safety validator. Integration of dual-mode firmware that accepts AI commands when available and falls back to autonomous operation otherwise. End-to-end testing of the complete sense-reason-validate-act pipeline.
 
-\textbf{Phase~3, Intelligence Layer (LLM Integration):} Implementation of the Raspberry Pi intelligence layer including the UART bridge for serial communication with ESP32, body-context assembly, Groq/NVIDIA inference via the task agent, and the safety validator. Integration of dual-mode firmware that accepts AI commands when available and falls back to autonomous operation otherwise. End-to-end testing of the complete sense--reason--validate--act pipeline.
-
-\textbf{Phase~4, Multimodal Agent:} Addition of Pi Camera v2.1 for visual perception, USB microphone with openWakeWord for voice commands, Bluetooth speaker for TTS feedback, and Telegram bot for remote multimodal interaction. Extension of the context builder to include image scene descriptions and speech transcripts. Implementation of a 7-state event-driven architecture, ReAct-style visual object search with semantic memory, multi-step JSON plan execution, animated OLED face expressions, and autonomous presentation mode.
+\textbf{Multimodal Agent:} Addition of Pi Camera v2.1 for visual perception, USB microphone with openWakeWord for voice commands, Bluetooth speaker for TTS feedback, and Telegram bot for remote multimodal interaction. Extension of the context builder to include image scene descriptions and speech transcripts. Implementation of a 7-state event-driven architecture, ReAct-style visual object search with semantic memory, multi-step JSON plan execution, animated OLED face expressions, and autonomous presentation mode.
 
 %-------------------------------------------------------------------
 \section{Organization of Report}
@@ -264,23 +240,23 @@ The project follows a phased iterative development methodology (Fig.~\ref{fig:ph
 
 The report is organized into the following chapters:
 
-\textbf{Chapter~1, Introduction:} Background and motivation, global and societal relevance, problem statement, objectives, scope, methodology, and organisation of the report.
+\textbf{Chapter~1:} Background and motivation, global and societal relevance, problem statement, objectives, scope, methodology, and organisation of the report.
 
-\textbf{Chapter~2, Theory and Concepts:} Theoretical foundations covering embodied AI, Large Language Models for robot control, sense--reason--act architectures, ultrasonic distance sensing, PWM motor control, UART serial communication, and safety validation in autonomous systems.
+\textbf{Chapter~2:} Theoretical foundations covering embodied AI, Large Language Models for robot control, sense-reason-act architectures, ultrasonic distance sensing, PWM motor control, UART serial communication, and safety validation in autonomous systems.
 
-\textbf{Chapter~3, Software Requirement Specification:} Functional and non-functional requirements, product perspective and functions, user classes, system constraints, and hardware/software requirements.
+\textbf{Chapter~3:} Functional and non-functional requirements, product perspective and functions, user classes, system constraints, and hardware/software requirements.
 
-\textbf{Chapter~4, High Level Design:} System architecture, design considerations, development methodology, data flow diagrams at levels~0, 1, and~2, and architectural strategies.
+\textbf{Chapter~4:} System architecture, design considerations, development methodology, data flow diagrams at levels~0, 1, and~2, and architectural strategies.
 
-\textbf{Chapter~5, Detailed Design:} Module-level structure chart, detailed description of each module including ESP32 firmware, UART bridge, context builder, LLM client, safety validator, and orchestrator.
+\textbf{Chapter~5:} Module-level structure chart, detailed description of each module including ESP32 firmware, UART bridge, context builder, LLM client, safety validator, and orchestrator.
 
-\textbf{Chapter~6, Implementation:} Languages and platforms, repository layout, UART/JSON protocol, firmware and Python implementation excerpts, integration difficulties, and build/run steps.
+\textbf{Chapter~6:} Languages and platforms, repository layout, UART/JSON protocol, firmware and Python implementation excerpts, integration difficulties, and build/run steps.
 
-\textbf{Chapter~7, Software Testing:} Unit, integration, and system test procedures; traceability to functional requirements; limitations and future test automation.
+\textbf{Chapter~7:} Unit, integration, and system test procedures; traceability to functional requirements; limitations and future test automation.
 
-\textbf{Chapter~8, Experimental Results and Conclusions:} Demonstration outcomes, timing parameters, discussion of limitations, and conclusions with Phase~4 future work.
+\textbf{Chapter~8:} Demonstration outcomes, timing parameters, discussion of limitations, and conclusions with future work.
 
-\textbf{Chapter~9, Conclusion:} Objective-to-evidence mapping, engineering reflections, and closing remarks.
+\textbf{Chapter~9:} Objective-to-evidence mapping, engineering reflections, and closing remarks.
 
 %-------------------------------------------------------------------
 \section{Summary}

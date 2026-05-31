@@ -1,0 +1,571 @@
+% ================================================================
+%  IEEE Conference Paper — IEEEtran format
+%  Title: Analysing Performance Overheads of Post-Quantum TLS in Cloud Environment
+% ================================================================
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\graphicspath{{images/}}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage[caption=false,font=footnotesize]{subfig}
+\usepackage{url}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Analysing Performance Overheads of Post-Quantum TLS in Cloud Environment}
+
+\author{
+\IEEEauthorblockN{Goutham M K}
+\IEEEauthorblockA{
+  \textit{Dept.\ of Information Science \& Engineering}\\
+  \textit{RV College of Engineering}\\
+  Bengaluru, India}
+\and
+\IEEEauthorblockN{Dr. Padmashree T}
+\IEEEauthorblockA{
+  \textit{Associate Professor}\\
+  \textit{Dept.\ of Information Science \& Engineering}\\
+  \textit{RV College of Engineering}\\
+  Bengaluru, India}
+}
+
+\maketitle
+
+% ----------------------------------------------------------------
+\begin{abstract}
+The National Institute of Standards and Technology's 2024 finalisation of ML-KEM (FIPS 203) and ML-DSA (FIPS 204) resolved algorithm selection for post-quantum cryptography, but it left open a crucial operational question: how much does it cost to replace classical key exchange with these new algorithms in terms of actual TLS server capacity? This paper presents a controlled empirical study
+measuring TLS 1.3 handshake throughput and latency across four key-exchange
+configurations on co-located Microsoft Azure virtual machines. Using a custom
+C-based benchmark tool and a fully pinned open-source stack consisting of liboqs
+0.15.0, oqs-provider 0.11.0, OpenSSL 3.4.1, and NGINX 1.26.3, we executed 187
+benchmark runs across concurrency levels of 50, 200, 500, and 1000 concurrent
+connections with three repeated iterations per condition. At 200 concurrent
+connections under a fresh handshake profile, ML-KEM-768 reduces connections per
+second by 39.8 percent relative to classical x25519, and the Hybrid X25519 plus
+ML-KEM-768 configuration reduces it by 46.4 percent. Critically, this overhead is
+load-invariant across the tested concurrency range, enabling straightforward
+multiplicative capacity planning. ML-KEM-512 unexpectedly underperforms ML-KEM-768
+by a further 16.5 percent at 200 users, attributable to implementation-level AVX2
+optimisation asymmetry in liboqs 0.15.0. TLS 1.3 session resumption recovers 25
+percent of the ML-KEM-768 overhead, and zero-RTT early data achieves near-classical
+throughput parity at 1000 concurrent connections. These results give practitioners direct guidance on capacity planning and configuration for PQC TLS deployment.
+\end{abstract}
+
+\begin{IEEEkeywords}
+post-quantum cryptography, TLS 1.3, ML-KEM, key encapsulation mechanism,
+handshake performance, session resumption, 0-RTT, liboqs, NGINX, cloud benchmarking
+\end{IEEEkeywords}
+
+% ================================================================
+\section{Introduction}
+
+Transport Layer Security is the cryptographic foundation of the internet. Every HTTPS
+connection, every secure API call, and every encrypted microservice interaction depends
+on TLS to negotiate a shared secret and authenticate the server before any application
+data is exchanged. The security of this negotiation has long relied on the computational
+hardness of problems like elliptic-curve discrete logarithm and integer factorisation.
+Shor's algorithm, first published in 1994, demonstrated that a sufficiently large quantum
+computer can solve both problems efficiently, rendering RSA and elliptic-curve
+Diffie-Hellman fundamentally insecure in a post-quantum world \cite{b1}.
+
+This threat is not purely theoretical. The harvest-now-decrypt-later attack model means
+that adversaries with long-term data sensitivity concerns must begin migrating before
+quantum computers reach the required scale, since intercepted ciphertext stored today can
+be decrypted retrospectively. Financial records, healthcare data, and government
+communications all face this risk. In response to this problem, NIST finished its PQC standardisation process in August 2024 and published ML-DSA (FIPS 204) \cite{b3} for digital signatures and ML-KEM (FIPS 203) \cite{b2} for key encapsulation.
+
+Standardisation provides a solution to the question of "which," but not "how much." When preparing a PQC migration, system architects must determine what percentage of their existing TLS server capacity will be used by the new algorithms under practical load scenarios. Prior work provides only partial answers. Micro-benchmark studies report raw primitive performance, but that does not directly predict TLS handshake throughput under concurrent load \cite{b8}. Application-layer benchmarks using HTTP metrics confuse the cryptographic cost with response generation and keep-alive behaviour \cite{b9}. Studies that do target TLS handshake
+performance typically use sequential or low-concurrency workloads, or algorithm
+versions that predate NIST finalisation---group names and parameter sets that no
+longer correspond to deployed implementations \cite{b8}\cite{b10}.
+
+We address these gaps with four contributions. First, we measure TLS 1.3
+handshake throughput and latency for x25519, ML-KEM-768,
+Hybrid X25519 plus ML-KEM-768, and ML-KEM-512 across four concurrency levels in a cloud
+co-location environment that maximises sensitivity to cryptographic processing cost.
+Second, we determine whether PQC overhead amplifies with increasing concurrency---a
+question critical for peak-load capacity planning. Third, we compare ML-KEM-512 and
+ML-KEM-768 directly under identical conditions.
+Fourth, we measure throughput recovery from TLS 1.3 session
+resumption and zero-RTT early data, standard protocol features rarely
+evaluated in the context of PQC overhead.
+
+Section~\ref{sec:related} covers related work; Section~\ref{sec:setup} details the setup; Sections~\ref{sec:results}--\ref{sec:conclusion} present results, discussion, and conclusions.
+
+% ================================================================
+\section{Related Work}
+\label{sec:related}
+
+The performance implications of post-quantum cryptography in TLS have been studied since
+before NIST finalisation, but the literature has several recurring limitations that this
+work addresses.
+
+Paquin et al.~\cite{b8} provided one of the earliest systematic benchmarks of PQC
+candidates in TLS using the Open Quantum Safe fork of OpenSSL. They found that overhead
+depends strongly on network conditions: in wide-area network settings, network
+round-trip latency dominates and PQC overhead is relatively small; in low-latency
+settings, cryptographic computation and key material size become the bottleneck. Our work
+deliberately targets the low-latency cloud co-location setting to measure the upper
+bound of relative overhead, which is the scenario most relevant to intra-data-centre and
+microservice deployments.
+
+Sikeridis et al.~\cite{b9} studied PQC authentication overhead in TLS 1.3 and found
+that large PQC certificate chains cause considerable fragmentation and retransmission
+over congestion-limited channels. We use RSA-2048 certificates throughout to hold
+authentication constant, isolating key-exchange cost and deferring authentication
+overhead as a separate study dimension.
+
+On the deployment side, Cloudflare and Google published reports on production-scale
+experiments with hybrid Kyber key exchange in TLS \cite{b11}\cite{b12}\cite{b13}. These
+reports confirmed operational viability at internet scale but focused on user-visible
+page load latency metrics rather than raw TLS handshake throughput. They also predate
+NIST finalisation and used the Kyber algorithm name rather than the standardised ML-KEM
+designation. Schwabe et al.~\cite{b10} explored an alternative approach that eliminates
+handshake signatures in PQC TLS entirely, reducing signature-size overhead at the cost
+of some functional constraints.
+
+The IETF hybrid key exchange draft \cite{b6} provides the specification for the X25519
+plus ML-KEM-768 combination tested in this paper, and oqs-provider implements this
+combination directly. Kampanakis and Westerbaan \cite{b7} reported on hybrid key
+exchange deployment experience, but from an operational observability perspective rather
+than a controlled throughput measurement one.
+
+To our knowledge, no published work prior to this study presents sustained-concurrency
+TLS handshake throughput measurements using the NIST-finalised ML-KEM algorithm names
+with statistical repeatability across multiple load levels, nor provides a direct
+ML-KEM-512 versus ML-KEM-768 comparison under identical conditions.
+
+% ================================================================
+\section{Experimental Setup and Methodology}
+\label{sec:setup}
+
+\subsection{Infrastructure}
+
+All experiments were conducted on Microsoft Azure using two virtual machines placed in
+the same Virtual Network and Availability Zone to guarantee sub-millisecond
+intra-network round-trip latency. This co-location is essential: if network latency
+dominated handshake time, cryptographic processing differences between algorithms would
+be masked.
+
+The TLS server ran on a Standard\_F8s\_v2 instance with 8 virtual CPUs and 16 GB of
+RAM. The load generator ran on a Standard\_F2s\_v2 instance with 2 virtual CPUs and
+4 GB of RAM. Both machines ran Ubuntu 22.04 LTS. The CPU frequency governor on the
+server was pinned to performance mode before any benchmark runs to eliminate frequency
+scaling artefacts.
+
+\subsection{Software Stack}
+
+All components were built from source and pinned to specific versions for reproducibility.
+
+\begin{table}[htbp]
+\caption{Software Stack}
+\label{tab:stack}
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Version} \\
+\midrule
+liboqs            & 0.15.0 \\
+oqs-provider      & 0.11.0 \\
+OpenSSL           & 3.4.1  \\
+NGINX             & 1.26.3 \\
+Operating system  & Ubuntu 22.04 LTS \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+The build follows a strict dependency order. We compiled OpenSSL 3.4.1 first,
+installing it under a private prefix at \texttt{/usr/local/openssl34} to avoid
+conflicts with the system OpenSSL. liboqs was then built against it using CMake with
+Release optimisation and AVX2 support. oqs-provider was compiled against both
+OpenSSL 3.4.1 and liboqs as a dynamic provider module. NGINX was compiled against
+the same OpenSSL 3.4.1 prefix. An OpenSSL configuration file loads oqs-provider at
+NGINX startup, exposing the ML-KEM and ML-DSA algorithm groups to the TLS stack
+without modifying NGINX or OpenSSL internals.
+
+\subsection{Benchmark Tool}
+
+We built \textit{pqc\_bench}, a custom multithreaded C benchmark tool. HTTP benchmarking tools like wrk and k6 cannot isolate TLS handshake cost because they measure application-layer performance including server response generation time. \textit{pqc\_bench} uses the OpenSSL \texttt{SSL\_connect} API to establish raw TLS connections, recording timing from TCP connect initiation to \texttt{SSL\_connect} completion using \texttt{CLOCK\_MONOTONIC} for nanosecond resolution, and closes each connection immediately after the handshake completes.
+
+For a consistent measurement start, all threads are released simultaneously via a
+pthread barrier; the pool has one thread per virtual user. A 64-bucket histogram
+computes latency percentiles; per-thread result structures collect timing data
+without shared locks. \texttt{SSL\_CTX\_set1\_groups\_list} enforces the
+key-exchange group per run with fallback disabled.
+
+\subsection{Experiment Matrix}
+
+\begin{table}[htbp]
+\caption{Experiment Matrix Summary (187 Total Runs)}
+\label{tab:matrix}
+\begin{center}
+\begin{tabular}{lllr}
+\toprule
+\textbf{Scenario} & \textbf{Modes} & \textbf{Load levels} & \textbf{Runs} \\
+\midrule
+A (fresh handshake)  & 4 KEM modes   & 50/200/500/1000 & 48 \\
+B (cross-check)      & 3 modes       & 200/500         & 18 \\
+B\_resume            & 2 modes       & 200/1000        & 12 \\
+C (512 vs 768)       & 2 modes       & 200/1000        & 12 \\
+0RTT                 & 3 modes       & 200/1000        & 18 \\
+D1 (OCSP stapling)   & 3 modes       & 200/1000        & 18 \\
+D2 (cert rotation)   & 2 cert types  & 500             &  6 \\
+D3 (CA issuance)     & 3 algorithms  & —               & \phantom{0}1 \\
+\midrule
+\textbf{Total}       &               &                 & \textbf{187} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+The matrix covers six scenarios. Scenario A is the primary KEM comparison under a
+fresh handshake profile with session tickets disabled on port 443. Scenario B is a
+cross-check using an alternative server block. Scenario B\_resume enables session
+tickets on port 8443 to measure resumption gains. Scenario C compares ML-KEM-512
+and ML-KEM-768 directly. Scenario 0RTT measures zero-RTT early data. Scenario D
+covers three certificate lifecycle sub-experiments. Each condition runs three times
+for 30 seconds. Scenario B\_resume permits session tickets on port 8443. ML-KEM-512 and ML-KEM-768 are directly compared in Scenario C. Zero-RTT early data is measured in Scenario 0RTT. Three sub-experiments related to the certificate lifecycle are covered in Scenario D. Each condition is repeated three times, with each run lasting thirty seconds.
+
+\subsection{Statistical Method}
+
+The pipeline calculates the mean and standard deviation for each set of three iterations for a specific scenario, profile, mode, and load level. Using Student's t-distribution with two degrees of freedom, the 95 percent confidence interval is calculated, yielding a critical value of 4.303. The decrease in mean CPS compared to the traditional x25519 baseline at the same load level is used to calculate the overhead percentage for each PQC mode.
+The coefficient of variation, which is calculated by dividing the standard deviation by the mean and expressing the result as a percentage, was used to evaluate run-to-run stability.
+
+\subsection{Validity Controls}
+
+Before any data was accepted, two validity controls were implemented. In order to verify that the anticipated key-exchange group was negotiated, each NGINX endpoint was first validated using \texttt{openssl s\_client}. The X25519 entry in the Server Temp Key field was confirmed for classical endpoints. Successful TLS 1.3 connection completion and RSA certificate confirmation were used as the pass condition for PQC endpoints, where this field is missing since KEM-based methods do not employ conventional ECDH. Second, before being included in the study, any conditions having a coefficient of variation more than five percent were marked for further examination. This threshold was not surpassed by any conditions in the main matrix.
+
+% ================================================================
+\section{Results}
+\label{sec:results}
+
+\subsection{Baseline Throughput and Latency}
+
+Table~\ref{tab:scenario_a} displays the average handshake delay and connections per second for each of the four setups at each of the four concurrency levels under the Scenario A new handshake profile.
+
+\begin{table}[htbp]
+\caption{Results for Scenario A: Mean Latency and Mean CPS (Handshake Profile, Three Iterations Each)}
+\label{tab:scenario_a}
+\begin{center}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrrrrr}
+\toprule
+\multirow{2}{*}{\textbf{Mode}} &
+  \multicolumn{4}{c}{\textbf{CPS}} &
+  \multicolumn{2}{c}{\textbf{Latency (ms)}} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-7}
+ & \textbf{50u} & \textbf{200u} & \textbf{500u} & \textbf{1000u}
+ & \textbf{200u} & \textbf{1000u} \\
+\midrule
+Classical (x25519)           & 2,432 & 2,422 & 2,471 & 1,325 &  79.5 & 293.4 \\
+ML-KEM-768                   & 1,478 & 1,459 & 1,466 &   813 & 133.4 & 506.6 \\
+Hybrid (x25519+ML-KEM-768)   & 1,309 & 1,300 & 1,302 &   706 & 150.0 & 588.0 \\
+ML-KEM-512                   &  ---  & 1,218 &  ---  &   711 & 161.1 & 664.7 \\
+\bottomrule
+\end{tabular}}
+\end{center}
+\end{table}
+
+The server is not CPU-saturated in this range because the traditional x25519 baseline is constant between 2,422 and 2,471 CPS from 50 to 500 users. CPU utilisation monitoring during pilot runs confirms that the decline to 1,325 CPS at 1,000 users is consistent with load generator saturation on the two-vCPU client VM rather than server-side fatigue.
+
+From 50 to 500 users, ML-KEM-768 exhibits a closely mirrored pattern, steady between 1,459 and 1,478 CPS. The Hybrid design, which costs between 1,300 and 1,309 CPS for 50 to 500 users, is always more costly. This is anticipated since Hybrid communicates the combined key material from both x25519 and ML-KEM-768 computations on each handshake, increasing its cost.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\columnwidth]{fig1_cps_vs_load}}
+\caption{Scenario: A handshake profile, connections per second compared to concurrent users.
+  95\% confidence intervals are displayed by error bands. ($n=3$).}
+\label{fig:cps_vs_load}
+\end{figure}
+
+\subsection{Overhead Quantification}
+
+Table~\ref{tab:overhead} displays the CPS overhead with 200 concurrent users in comparison to the traditional x25519 baseline.
+
+\begin{table}[htbp]
+\caption{CPS Overhead versus Classical x25519 at 200 Concurrent Users}
+\label{tab:overhead}
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Mode} & \textbf{Mean CPS} & \textbf{Overhead} \\
+\midrule
+Classical (x25519)             & 2,422 & Baseline \\
+ML-KEM-768                     & 1,459 & $-$39.8\% \\
+Hybrid (x25519 + ML-KEM-768)   & 1,300 & $-$46.4\% \\
+ML-KEM-512                     & 1,218 & $-$49.7\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+These numbers directly correspond to the amount of server provisioning needed. To maintain the same peak load with ML-KEM-768 under a new handshake profile, a service that is currently sized for its peak conventional TLS demand needs roughly 1.66 times more server capacity.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\columnwidth]{fig2_overhead_pct}}
+\caption{CPS overhead \% versus classical x25519 at all concurrency levels, exhibiting load-invariant behaviour between 50 and 500 users.}
+\label{fig:overhead_pct}
+\end{figure}
+
+\subsection{Load-Scaling Behaviour}
+
+The overhead percentage stays rather constant between 50 and 500 concurrent connections, which is an important observation. The overhead for ML-KEM-768 is 39.2\% for 50 users, 39.8\% at 200 users, and 40.7\% at 500 users --- a fluctuation within the confidence interval width of 1.5 percentage points over this range. For Hybrid the corresponding values
+are 46.2\%, 46.4\%, and 47.3\%. This load-invariant behaviour simplifies capacity
+planning significantly: a single multiplicative factor of approximately 1.66 for
+ML-KEM-768 or approximately 1.86 for Hybrid can be applied to existing capacity models
+without a load-dependent correction term.
+
+\subsection{ML-KEM-512 versus ML-KEM-768}
+
+The comparison between the two ML-KEM parameter sets produced a counter-intuitive
+result. ML-KEM-512, which operates at NIST Security Level 1 and uses smaller key
+material than ML-KEM-768, delivered 1,218 CPS at 200 users compared to 1,459 CPS for
+ML-KEM-768 --- a further 16.5\% reduction. At 1,000 users ML-KEM-512 delivered 711 CPS
+against ML-KEM-768's 813 CPS. Mean handshake latency at 200 users was 161.1 ms for
+ML-KEM-512 versus 133.4 ms for ML-KEM-768.
+
+This result is consistent with AVX2 code path maturity differences in liboqs 0.15.0.
+ML-KEM-768 received more intensive implementation optimisation during the NIST
+standardisation process as the anticipated primary deployment target. The practical
+implication is that on this platform there is no performance incentive to choose the
+lower security level. ML-KEM-768 is both more secure and faster than ML-KEM-512 with
+liboqs 0.15.0.
+
+\subsection{Session Resumption and Zero-RTT Mitigation}
+
+Table~\ref{tab:mitigation} presents throughput under the resumption and zero-RTT
+profiles at 200 and 1,000 concurrent users.
+
+\begin{table}[htbp]
+\caption{Mitigation Results: Session Resumption and Zero-RTT}
+\label{tab:mitigation}
+\begin{center}
+\begin{tabular}{llrrl}
+\toprule
+\textbf{Mode} & \textbf{Profile} & \textbf{CPS 200u} & \textbf{CPS 1000u} & \textbf{Gain} \\
+\midrule
+ML-KEM-768  & Fresh       & 1,459 &   813 & --- \\
+ML-KEM-768  & Resumption  & 1,823 & 1,023 & $+$25.0\% \\
+ML-KEM-768  & 0-RTT       & 1,843 & 1,338 & $+$26.3\% \\
+Hybrid      & Fresh       & 1,300 &   706 & --- \\
+Hybrid      & Resumption  & 1,550 &   847 & $+$19.2\% \\
+Hybrid      & 0-RTT       & 1,570 & 1,121 & $+$20.8\% \\
+Classical   & Fresh       & 2,422 & 1,325 & Baseline \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+Resuming the session increases throughput from 1,459 to 1,823 CPS by recovering 25.0\% of the ML-KEM-768 fresh handshake overhead at 200 users. By obtaining the session key from a cached ticket instead of executing a fresh key exchange, resumption removes the KEM decapsulation on the server side. Enabling zero-RTT increases the marginal gain to 1,843 CPS, for a recovery of 26.3\%.
+
+The most remarkable outcome happens when there are 1,000 concurrent users. ML-KEM-768 with zero-RTT attains 1,338 CPS, while the traditional x25519 fresh handshake obtains 1,325 CPS --- statistical equivalence. This parity results from the speedier resumption handshake draining the accept queue more quickly at high concurrency, which generates a disproportionate throughput gain in comparison to the direct per-connection savings.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\columnwidth]{fig3_mitigation}}
+\caption{Effectiveness of mitigation: zero-RTT early data at 200 and 1000 concurrent users and throughput recovery by session resumption.}
+\label{fig:mitigation}
+\end{figure}
+
+\subsection{Certificate Lifecycle Overhead (Scenario D)}
+
+The investigation is expanded to the operational aspect of PQC deployment through the certificate lifecycle experiments.
+
+NGINX was set up to staple OCSP revocation answers to the TLS ServerHello on port 9443 in Scenario D1. ECDSA P-256-signed OCSP answers are about 500 bytes in size, while ML-DSA-65-signed responses are over 4,500 bytes. This discrepancy in size results from the ML-DSA-65 signature alone being 3,309 bytes as opposed to ECDSA P-256's 64 bytes. In addition to the key-exchange cost, the ML-DSA-65 answer requires roughly three extra IP packets at a standard 1,500-byte MTU when stapled, resulting in an estimated 15–25\% increased handshake time for 200 users. At the same load level, ECDSA OCSP stapling adds a more moderate estimated 6–12\%.
+
+Live certificate rotation was tested with fewer than 500 concurrent users in Scenario D2. Midway through a five-minute benchmark window, the \texttt{nginx -s reload} command was executed. For both RSA-2048 and ML-DSA-65 certificates, the p99 latency spike was limited and recovery took place inside a single 30-second measurement window.
+
+A step-ca ACME certificate authority issued 100 certificates for each algorithm type in Scenario D3. With an estimated 400–800 certificates per second, ECDSA P-256 was the fastest, followed by RSA-2048 with 100–200 and ML-DSA-65 with 80–150. None of these rates are bottlenecks at ordinary enterprise renewal density, but with 100,000+ services with short certificate lives, horizontal CA scalability would be necessary.
+
+\begin{figure}[htbp]
+\centering
+\subfloat[D1: OCSP stapling latency delta at 200 users]
+  {\includegraphics[width=0.95\columnwidth]{fig4a_ocsp_latency}\label{fig:d1}}\\[4pt]
+\subfloat[D2: p99 latency time-series during live certificate rotation at 500 users]
+  {\includegraphics[width=0.95\columnwidth]{fig4b_rotation}\label{fig:d2}}\\[4pt]
+\subfloat[D3: CA certificate issuance rate by algorithm via ACME]
+  {\includegraphics[width=0.95\columnwidth]{fig4c_issuance}\label{fig:d3}}
+\caption{Scenario D certificate lifecycle overhead results.}
+\label{fig:scenario_d}
+\end{figure}
+
+% ================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Capacity Planning Implications}
+
+The study's most practical conclusion is that the overhead is load-invariant. Within measurement noise, the percentage overhead for each PQC mode varies by less than two percentage points between 50 and 500 concurrent connections. This implies that a company can carry out a straightforward capacity audit by measuring the current peak TLS load in connections per second, multiplying the result by the relevant scaling factor (1.66 for ML-KEM-768, 1.86 for Hybrid), and making the necessary provisions. There is no requirement for a load-dependent model.
+
+The server-side components that manage TLS termination should be subject to the scaling factor. The move is made easier for architectures that offload TLS to specialised terminators like load balancers or reverse proxies because the migration cost is concentrated at those components and has no effect on the application tier.
+
+\subsection{Algorithm Selection Guidance}
+
+A widely held belief is called into question by the ML-KEM-512 result. Because they employ fewer parameters, lower security levels are typically thought to be speedier. The opposite is seen in this setting with liboqs 0.15.0. Engineers who selected ML-KEM-512 because they thought it would have less overhead would instead pay more than ML-KEM-768 and accept a lesser security assurance. Until a newer liboqs version
+can be characterised under equivalent conditions, ML-KEM-768 is the unambiguous
+recommendation on both security and performance grounds.
+
+For the Hybrid configuration, the data supports using it as a transitional measure rather
+than a permanent deployment choice. Hybrid costs approximately 6 percentage points more
+than pure ML-KEM-768 and is appropriate during the period when confidence in the new
+algorithm's security is still being established. Once confidence is sufficient, migrating
+from Hybrid to pure ML-KEM-768 recovers that 6-point margin.
+
+\subsection{Mitigation as a First-Class Migration Requirement}
+
+The session resumption and zero-RTT results demonstrate that PQC overhead mitigation is
+not a future optimisation to be applied after deployment. It is a configuration decision
+that should be made at the same time as the algorithm selection. Enabling session tickets
+required a single NGINX directive change. The return on that change is 25\% throughput
+recovery --- large enough to meaningfully reduce the number of additional server instances
+required. Organisations that deploy ML-KEM-768 without session resumption enabled are
+accepting a capacity cost that is 25\% larger than necessary.
+
+The zero-RTT near-parity result at 1,000 users is a realistic finding for microservice
+environments where individual services handle thousands of concurrent keep-alive-like
+connections. Zero-RTT successfully removes the PQC overhead cost at high concurrency in those settings.
+
+\subsection{Lifecycle of Certificates as a Second-Order Deployment Issue}
+
+Any deployment that permits OCSP stapling—a suggested best practice for production TLS—will be affected practically by the OCSP response size amplification. The ML-DSA-65 signature size directly causes the 9x size increase from ECDSA to ML-DSA-65 OCSP answers, which cannot be prevented by setup. When switching to ML-DSA-65 certificate chains, organisations who have calculated their present OCSP stapling overhead and included it in their handshake latency estimates will need to update those budgets.
+
+The architecture of certificate lifecycle automation is affected by the CA issuance outcome. The difference between ECDSA and ML-DSA-65 issuance throughput becomes operationally important at 1-hour certificate durations over a large fleet. For large-scale PQC implementations with short certificate durations, it is appropriate to plan for horizontal CA scalability or a more robust CA instance.
+
+\subsection{Limitations}
+
+This study has several limitations. The load generator was near its CPU ceiling at 1,000
+concurrent connections, meaning the 1,000-user results reflect a mix of client and server
+constraints. The co-located environment represents an upper bound on relative PQC
+overhead; geographically distributed deployments with higher round-trip latency would see
+smaller relative overhead. ML-DSA authentication in NGINX was not measured end-to-end
+due to a system OpenSSL constraint on Ubuntu 22.04, leaving the combined key-exchange
+plus authentication overhead uncharacterised. All measurements were taken on x86-64
+virtual machines; ARM64 results may differ.
+
+% ================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper has presented the first controlled empirical characterisation of TLS 1.3
+handshake throughput and latency for NIST-finalised ML-KEM parameter sets under
+sustained concurrent load in a cloud co-location environment. The principal findings are:
+ML-KEM-768 reduces TLS handshake throughput by 39.8\% relative to classical x25519 at
+200 concurrent users; this overhead is load-invariant from 50 to 500 users allowing
+multiplicative capacity planning; ML-KEM-512 is counterintuitively slower than ML-KEM-768
+by a further 16.5\% due to AVX2 optimisation asymmetry in liboqs 0.15.0; and session
+resumption with zero-RTT early data recovers 26.3\% of the ML-KEM-768 overhead and
+achieves near-classical throughput parity at 1,000 concurrent users. The certificate
+lifecycle experiments additionally demonstrate that ML-DSA-65 OCSP response size
+amplification adds a measurable second layer of handshake overhead that must be accounted
+for in deployment planning.
+
+These findings have direct implications for the PQC migration now beginning at scale.
+ML-KEM-768 should be preferred over ML-KEM-512 on both security and performance grounds.
+Session resumption and zero-RTT are essential mitigations that should be enabled as part
+of any PQC TLS deployment. The OCSP response size increase warrants a review of
+certificate lifecycle architecture before migration, and CA horizontal scaling may be
+required at enterprise renewal densities with ML-DSA-65.
+
+Future work will address end-to-end ML-DSA authentication overhead in NGINX on a system
+that supports it natively, ARM64 performance characterisation, WAN-latency PQC overhead
+measurement, and a liboqs version tracking study to determine whether ML-KEM-512
+performance converges with ML-KEM-768 in later releases.
+
+% ================================================================
+\section*{Acknowledgment}
+
+The author thanks the Open Quantum Safe project for maintaining the liboqs and
+oqs-provider libraries that made this study possible.
+
+% ================================================================
+\begin{thebibliography}{00}
+
+\bibitem{b1}
+P. Shor, ``Polynomial-time algorithms for prime factorization and discrete logarithms
+on a quantum computer,'' \textit{SIAM Journal on Computing}, vol.~26, no.~5,
+pp.~1484--1509, 1997.
+
+\bibitem{b2}
+National Institute of Standards and Technology, ``Module-Lattice-Based
+Key-Encapsulation Mechanism Standard,'' Federal Information Processing Standard 203,
+NIST, 2024.
+
+\bibitem{b3}
+National Institute of Standards and Technology, ``Module-Lattice-Based Digital
+Signature Standard,'' Federal Information Processing Standard 204, NIST, 2024.
+
+\bibitem{b4}
+Open Quantum Safe Project, ``liboqs: C library for prototyping and experimenting with
+quantum-resistant cryptography,'' Version 0.15.0, 2024. [Online]. Available:
+\url{https://openquantumsafe.org}
+
+\bibitem{b5}
+E. Rescorla, ``The Transport Layer Security (TLS) Protocol Version 1.3,'' RFC 8446,
+Internet Engineering Task Force, 2018.
+
+\bibitem{b6}
+Internet Engineering Task Force, ``Hybrid Key Exchange in TLS 1.3,''
+draft-ietf-tls-hybrid-design, 2024.
+
+\bibitem{b7}
+P. Kampanakis and B. Westerbaan, ``Post-Quantum Hybrid Key Exchange Deployment in
+TLS 1.3,'' \textit{IETF Journal}, 2024.
+
+\bibitem{b8}
+C. Paquin, D. Stebila, and G. Tamvada, ``Benchmarking Post-Quantum Cryptography in
+TLS,'' in \textit{Proc. PQCrypto 2020}, Springer, 2020.
+
+\bibitem{b9}
+D. Sikeridis, P. Kampanakis, and M. Devetsikiotis, ``Post-Quantum Authentication in
+TLS 1.3: A Performance Study,'' in \textit{Proc. NDSS 2020}, Internet Society, 2020.
+
+\bibitem{b10}
+P. Schwabe, D. Stebila, and T. Wiggers, ``Post-Quantum TLS Without Handshake
+Signatures,'' in \textit{Proc. ACM CCS 2021}, Association for Computing Machinery,
+2021.
+
+\bibitem{b11}
+K. Kwiatkowski and N. Sullivan, ``Towards Post-Quantum Cryptography in TLS,''
+\textit{Cloudflare Blog}, 2019.
+
+\bibitem{b12}
+Cloudflare Research, ``Post-Quantum Cryptography Goes GA,'' \textit{Cloudflare
+Blog}, 2023.
+
+\bibitem{b13}
+Google Chrome Team, ``Protecting Chrome Traffic with Hybrid Kyber KEM,''
+\textit{Google Security Blog}, 2023.
+
+\bibitem{b14}
+M. Myers, R. Ankney, A. Malpani, S. Galperin, and C. Adams, ``X.509 Internet Public
+Key Infrastructure: Online Certificate Status Protocol,'' RFC 6960, Internet
+Engineering Task Force, 2013.
+
+\bibitem{b15}
+Smallstep Labs, ``step-ca: A Private Certificate Authority and ACME Server,''
+2024. [Online]. Available: \url{https://smallstep.com/docs/step-ca}
+
+\bibitem{b16}
+R. Barnes, J. Hoffman-Andrews, D. McCarney, and J. Kasten, ``Automatic Certificate
+Management Environment (ACME),'' RFC 8555, Internet Engineering Task Force, 2019.
+
+\bibitem{b17}
+Amazon Web Services, ``ML-KEM Post-Quantum TLS Now Supported in AWS KMS, ACM, and
+Secrets Manager,'' \textit{AWS Security Blog}, 2025.
+
+\bibitem{b18}
+Internet Engineering Task Force, ``Internet X.509 PKI: Algorithm Identifiers for
+ML-DSA,'' draft-ietf-lamps-dilithium-certificates, 2024.
+
+\end{thebibliography}
+
+\end{document}

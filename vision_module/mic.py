@@ -30,6 +30,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 SAMPLE_RATE  = 16000
+SAMPLE_RATES_TO_TRY = [16000, 44100, 48000, 8000]
 CHANNELS     = 1
 CHUNK        = 1024        # ~64ms per chunk at 16kHz
 FORMAT_WIDTH = 2           # 16-bit
@@ -43,6 +44,7 @@ class Microphone:
         self._device_index: Optional[int] = None
 
     def start(self) -> None:
+        global SAMPLE_RATE
         import pyaudio
         self._pyaudio = pyaudio.PyAudio()
         self._device_index = self._find_input_device()
@@ -50,18 +52,42 @@ class Microphone:
             logger.info("Mic ready: device index %d", self._device_index)
         else:
             logger.info("Mic ready: using default input device")
+        # Find a working sample rate for this device
+        for rate in SAMPLE_RATES_TO_TRY:
+            try:
+                test_stream = self._pyaudio.open(
+                    format=pyaudio.paInt16, channels=CHANNELS,
+                    rate=rate, input=True,
+                    input_device_index=self._device_index,
+                    frames_per_buffer=CHUNK,
+                )
+                test_stream.close()
+                SAMPLE_RATE = rate
+                logger.info("Mic sample rate: %d Hz", rate)
+                return
+            except Exception:
+                continue
+        logger.warning("Mic: no supported sample rate found, defaulting to %d", SAMPLE_RATE)
 
     # ── Device selection ───────────────────────────────────────────────────────
 
     def _find_input_device(self) -> Optional[int]:
-        """Find the 3.5mm audio input device on Pi."""
+        """Find a USB or 3.5mm audio input device on Pi."""
+        candidates = []
         for i in range(self._pyaudio.get_device_count()):
             info = self._pyaudio.get_device_info_by_index(i)
             if info["maxInputChannels"] > 0:
                 name = info["name"].lower()
-                if "bcm" in name or "headphone" in name or "audio" in name:
+                # Prefer USB mic, then 3.5mm jack, then any input
+                if "usb" in name or "pnp" in name:
                     logger.info("Found input device: [%d] %s", i, info["name"])
                     return i
+                if "bcm" in name or "headphone" in name or "audio" in name:
+                    candidates.append((i, info["name"]))
+        if candidates:
+            idx, name = candidates[0]
+            logger.info("Found input device: [%d] %s", idx, name)
+            return idx
         return None
 
     # ── VAD recording (preferred) ──────────────────────────────────────────────

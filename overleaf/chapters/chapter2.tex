@@ -2,103 +2,122 @@
 %  Chapter 2 — Theory and Concepts
 %  KANDA (Knowledge-driven Autonomous Navigation and Decision-making Agent)
 % ================================================================
-\chapter{Theory and Concepts}
+\chapter{THEORY AND CONCEPTS}
 \label{ch:theory}
 
-This chapter presents the theoretical foundations and core concepts that guide KANDA. Rather than presenting theory in isolation, we explain each idea in the context of why we needed it. We cover embodied artificial intelligence---the idea that thinking robots need bodies. We discuss Large Language Models for robot control and the specific problem of grounding: getting a language model to understand what a robot can actually do. We explain the sense--reason--act loop and why timing matters. Finally, we cover the specific hardware and communication technologies we chose. By the end of this chapter, you should understand not just what KANDA does, but why we made the design choices we did.
+Building a robot that listens, sees, thinks, and moves requires pulling ideas from several fields at once. This chapter lays out those ideas, not as a textbook survey, but tied directly to decisions I had to make while constructing KANDA. Why does the language model need to know the robot's sensor readings? Why can I not just send raw text to the motors? Why does the ESP32 need its own safety logic when the Pi is already running a validator? Each section answers one of these questions by grounding it in published work and then connecting it to my specific implementation choices.
+
 
 %-------------------------------------------------------------------
 \section{Embodied Artificial Intelligence}
 \label{sec:embodied}
 
-\textbf{Embodied artificial intelligence} treats cognition as inherently coupled with a physical body embedded in an environment: perception, reasoning, and action form a closed loop rather than disembodied symbolic manipulation~\cite{driess2023palme}. Early mobile robotics demonstrated that robust behaviour can emerge from layered reactive control without explicit global planning~\cite{brooks1986robust}. Contemporary embodied AI systems increasingly combine low-level motor control with high-level semantic reasoning, often mediated by learning or language~\cite{brohan2023rt2}.
+A language model sitting on a server can write poetry about walking, but it has never tripped over a cable. \textbf{Embodied AI} closes that gap; it insists that intelligent behaviour only makes sense when perception and action happen through a real body interacting with a physical world. The distinction matters practically: an embodied system must deal with noise from cheap sensors, latency over wireless links, and the fact that motors do not care about elegant sentences.
 
-For KANDA, embodiment implies three commitments: (1)~sensor readings reflect the robot's immediate physical situation; (2)~actuator commands change the world state and must respect mechanical and electrical limits; (3)~reasoning procedures must consume representations compatible with real hardware (finite vocabulary of actions, bounded speed, timing constraints).
+
+These systems cost tens or hundreds of thousands of dollars. KANDA asks a simpler question: can the \textit{behaviours} that matter for a desk-sized indoor robot (obstacle avoidance, voice commands, object search) run on a \$77 platform with no training data at all? The answer turns out to be yes, but only if I respect the old principle from Brooks~\cite{brooks1986robust} that fast reactive layers must sit beneath slow deliberative ones. My firmware reflex traces its lineage directly to subsumption architecture, even though the deliberation layer above it uses a 70-billion parameter model hosted in the cloud.
+
+
+These systems cost tens or hundreds of thousands of dollars. KANDA asks a simpler question: can the \textit{behaviours} that matter for a desk-sized indoor robot (obstacle avoidance, voice commands, object search) run on a \$77 platform with no training data at all? The answer turns out to be yes, but only if we respect the old principle from Brooks~\cite{brooks1986robust} that fast reactive layers must sit beneath slow deliberative ones. Our firmware reflex traces its lineage directly to subsumption architecture, even though the deliberation layer above it uses a 70-billion parameter model hosted in the cloud.
 
 %-------------------------------------------------------------------
 \subsection{Affordance Grounding}
 \label{subsec:affordance}
 
-An \textit{affordance} is an action possibility offered by the environment relative to an agent's capabilities. SayCan~\cite{ahn2022saycan} formalised the idea that language commands should be paired with actions that are \textit{both} linguistically plausible and physically feasible on the current platform. PaLM-E~\cite{driess2023palme} showed that multimodal models can fuse language with robot state and visual context for manipulation and navigation tasks. RT-2~\cite{brohan2023rt2} extended vision-language models toward generalisable robot policies.
+Gibson coined the term \textit{affordance} to describe what an environment offers a particular agent; a chair affords sitting for a human but not for a fish. In robotics, the question becomes: given a language command like ``put the cup on the shelf,'' which physical actions can this robot actually perform?
 
-KANDA instantiates a lightweight form of affordance grounding: the LLM is given an explicit inventory of legal motor primitives, speed bounds, and safety rules together with live sensor distances, so that generated commands remain within the robot's physical affordances without requiring a separate learned affordance model.
+SayCan~\cite{ahn2022saycan} tackled this by training affordance functions from 68,000 demonstrations. When a user issued a command, the system combined the language model's preference with a learned feasibility score to pick actions the robot could physically execute. PaLM-E~\cite{driess2023palme} took a different route, embedding sensor tokens directly into the language model so it could reason about feasibility internally. RT-2~\cite{brohan2023rt2} pushed further; it fine-tuned a vision-language model end-to-end so that the model output was itself a motor command, eliminating the separate affordance filter.
+
+I could not afford 68,000 demonstrations, a 562B model, or end-to-end fine-tuning. Instead, KANDA encodes affordances directly in the prompt: seven legal actions, a speed range of 0--255, and live ultrasonic distances. The model cannot propose ``fly'' or ``speed 500'' because the prompt tells it those do not exist. This is crude compared to learned affordances, but it costs nothing to maintain and catches most hallucinated actions before validation even runs.
+
 
 %-------------------------------------------------------------------
 \section{Large Language Models for Robot Control}
 \label{sec:llm_robot}
 
-\textbf{Large Language Models (LLMs)} are transformer-based models trained to predict text conditioned on context~\cite{vaswani2017attention}. For robotics, the central challenge is not language fluency but \textit{grounding}: mapping semantic intent and contextual prompts to executable behaviours on a specific robot~\cite{vemprala2024chatgpt}.
+Transformers~\cite{vaswani2017attention} revolutionised natural language processing by replacing recurrence with self-attention, enabling parallel training on massive corpora. The resulting models (GPT-4, Llama, Gemini) generate fluent text, but fluency does not imply physical feasibility. A model might confidently suggest ``accelerate to 400'' when the motor driver caps at 255.
+
+The gap between linguistic competence and physical grounding defines the core challenge. Vemprala et al.~\cite{vemprala2024chatgpt} articulated this in 2024: successful LLM-robot integration requires (a)~a clear description of the robot's capabilities in the prompt, (b)~low-temperature sampling to suppress creative but dangerous outputs, and (c)~a post-generation filter that catches anything the prompt did not prevent. KANDA implements all three, though I arrived at this design through trial and error before reading their systematic treatment.
+
 
 %-------------------------------------------------------------------
-\subsection{Transformers and Context Conditioning}
-\label{subsec:transformers}
-
-The transformer architecture uses self-attention to relate all positions in a sequence, enabling long-range dependencies and parallel training~\cite{vaswani2017attention}. At inference time, the model conditions its output on the provided prompt (hardware description, sensor readings, and instructions). Low temperature and constrained output formats (JSON) promote deterministic, parseable commands suitable for embedded consumption.
-
-%-------------------------------------------------------------------
-\subsection{Prompting as Program Specification}
+\subsection{Prompting as Interface Specification}
 \label{subsec:prompting}
 
-Recent work treats natural-language prompts as partial specifications of robot APIs and environments. ProgPrompt~\cite{singh2023progprompt} generates situated programs from LLMs using declared functions and state; Code as Policies~\cite{liang2023code} generates executable code for control. ChatGPT for Robotics~\cite{vemprala2024chatgpt} emphasises clear API descriptions, chain-of-thought decomposition, and iterative correction.
+Rather than training models on robot data, several groups discovered that careful prompting alone can produce usable control outputs. Huang et al.~\cite{huang2022zeroshot} first demonstrated that language models serve as effective zero-shot planners when carefully framed. Liang et al.~\cite{liang2023code} framed the prompt as a Python API specification and let the model write policy code. Singh et al.~\cite{singh2023progprompt} went further, declaring robot functions and world state in the prompt so the model could generate situated programs.
 
-KANDA's hardware-description prompt follows this paradigm: it fixes the action vocabulary, enumerates safety constraints, and supplies numeric telemetry so the model output becomes a small structured command rather than unconstrained natural language.
+Chain-of-thought prompting~\cite{wei2022cot} showed that forcing the model to ``think step by step'' improves multi-step planning. Yao et al.\ combined this with action execution in ReAct~\cite{yao2023react}, where the model alternates between reasoning traces and concrete actions, observing results before deciding the next step. Our visual search algorithm borrows this structure: capture a frame, describe it, decide whether the target is visible, then pick the next movement.
+
+KANDA's prompt is deliberately simpler than these systems. I do not generate code or multi-step reasoning chains at inference time. The prompt specifies seven verbs, a numeric speed field, and current sensor readings. The model returns a single JSON line. This keeps the firmware parser trivial and the validator unambiguous.
+
 
 %-------------------------------------------------------------------
-\subsection{Grounded Decoding and Command-Level Validation}
+\subsection{Grounded Decoding and Post-Hoc Validation}
 \label{subsec:grounded}
 
-Grounded decoding~\cite{huang2023grounded} combines language-model probabilities with feasibility signals during generation. KANDA applies an analogous idea \textit{after} generation: a deterministic validator filters LLM output before actuation. This separation keeps the LLM flexible while guaranteeing that only whitelisted actions and clamped speeds reach the motors.
+Huang et al.~\cite{huang2023grounded} proposed an elegant idea: during token generation, multiply the language model's probability distribution by a grounding signal (e.g., a feasibility score from a physics model) so that infeasible tokens get suppressed before they even appear in the output. This requires access to the model's logits, something cloud APIs generally do not expose.
+
+KANDA takes the conceptually similar but architecturally distinct approach of post-hoc validation. I let the model generate freely, then run a total function $V$ that either accepts the output (if action $\in$ whitelist and speed $\in [0,255]$) or replaces it with a stop command. The validator never raises an exception, never passes garbage downstream, and adds negligible latency ($<$1\,ms). It is less elegant than logit-level intervention, but works with any API, any model, and any future provider swap.
+
 
 %-------------------------------------------------------------------
-\section{Sense--Reason--Act Architecture}
+\section{Sense-Reason-Act Architecture}
 \label{sec:sra}
 
-The classical \textbf{sense--reason--act} loop underlies most autonomous robots: observe the environment, make a decision, carry it out, and repeat. In KANDA, each step runs on a different processor at a different timescale, and this mismatch forced us to rethink how they should talk to each other.
+Most autonomous robots follow a loop: read sensors, compute a decision, execute it, repeat. KANDA splits this across two processors running at wildly different speeds, and that split drives much of the architecture.
 
-On the \textbf{ESP32}, we sample three HC-SR04 ultrasonic sensors and measure distances to obstacles at 10\,Hz. On the \textbf{Raspberry Pi}, we build a hardware-description prompt that tells Gemini (the Google language model) what the robot can do, and we get back a JSON motion command. Then we validate that command before sending it back to the ESP32 to drive the motors.
+The ESP32 reads three ultrasonic sensors every 100\,ms, fast enough to catch a hand waving in front of the robot. The Raspberry Pi calls Groq or NVIDIA NIM over the network, which takes 1.5--4 seconds depending on server load and prompt length. If I forced the ESP32 to wait for every cloud response, the robot would lurch forward blindly during those seconds. Instead, the firmware runs its own obstacle-avoidance rules whenever the Pi has not sent a command recently (timeout: 3 seconds). The Pi's commands override these rules when they arrive, but the firmware never stops watching the sensors.
 
-The tricky part: Gemini takes 1.5--4 seconds per call, but obstacles can appear in under 100 milliseconds. We cannot put both timescales in the same loop. So when the reasoning layer is unavailable (API timeout, network failure, or any error), the firmware falls back to autonomous rule-based obstacle avoidance. This is what we call graceful degradation---the robot is slower and less intelligent without the cloud, but it stays safe.
+
+This is not a novel idea; Brooks described it in 1986~\cite{brooks1986robust}. What is new is layering a cloud-hosted 70B-parameter model on top of a \$4 microcontroller and still preserving sub-100\,ms reflexes. The trick is accepting that the LLM is advisory, not authoritative. It suggests; the validator approves; the firmware obeys, or overrides if the wall is too close.
 
 %-------------------------------------------------------------------
 \section{Proximate Sensing with Ultrasonic Rangefinders}
 \label{sec:ultrasonic}
 
-The HC-SR04 module estimates distance by measuring round-trip time of flight of an ultrasonic pulse. A trigger pulse initiates emission; the echo signal returns after reflection from an obstacle. With speed of sound $v_s \approx 343\,\mathrm{m\,s^{-1}}$ at room temperature, one-way distance is approximately $d = \frac{1}{2} v_s \Delta t$, where $\Delta t$ is the measured interval between trigger and echo.
+HC-SR04 modules are cheap, widely available, and good enough for indoor obstacle detection within 2--400\,cm. The Dynamic Window Approach~\cite{fox1997dwa} provides a formal basis for velocity-space obstacle avoidance; our threshold-based design simplifies this to a binary stop decision at 15\,cm. The principle is straightforward: a 40\,kHz burst leaves the transmitter, bounces off a surface, and returns to the receiver. The module holds an echo pin high for the round-trip duration $\Delta t$, and distance follows from $d = \frac{1}{2} \cdot 343 \cdot \Delta t$ metres at room temperature.
 
-\textbf{Practical considerations:} beam width and multipath reflections cause noise; soft or angled surfaces weaken echoes; cross-talk can occur with multiple units unless triggered sequentially. Voltage-level compatibility requires attenuating 5V logic from the sensor to ESP32 inputs (3.3V tolerant); KANDA uses resistor dividers on ECHO lines.
+In practice, three issues dominated our debugging time. First, the 15-degree beam width means small objects at oblique angles go undetected. Second, running three sensors simultaneously causes cross-talk where one sensor picks up another's echo. We solved this by triggering them sequentially within each loop iteration. Third, the HC-SR04 outputs 5V echo pulses, but ESP32 GPIO pins tolerate only 3.3V. Resistor dividers on each echo line handle the level shift; without them, the ESP32 reads noise or risks input damage.
 
 %-------------------------------------------------------------------
 \section{PWM Actuation and Motor Drive}
 \label{sec:pwm}
 
-\textbf{Pulse Width Modulation (PWM)} controls average voltage to DC motors by switching power devices at a fixed frequency and varying duty cycle. The ESP32 LEDC peripheral generates PWM waveforms on GPIO pins~\cite{espressif2023esp32}. The TB6612FNG dual H-bridge accepts direction bits (AIN1/AIN2, BIN1/BIN2) and PWM speed inputs (PWMA, PWMB), enabling forward, reverse, and speed control for a two-wheel differential drive.
+DC motors spin faster with higher average voltage. Rather than regulating actual voltage, we switch full supply on and off rapidly (Pulse Width Modulation) so that the motor sees an effective average proportional to the duty cycle. The ESP32's LEDC peripheral~\cite{espressif2023esp32} generates PWM signals with 8-bit resolution (0--255) at 1\,kHz, which is high enough that the motors hum rather than click.
 
-\textbf{Differential steering:} opposite wheel speeds produce turning; equal speeds produce straight motion. KANDA maps discrete LLM actions---for example \texttt{forward}, \texttt{left}, or \texttt{slight\_right}---to coordinated patterns of direction and duty cycle in firmware.
+The TB6612FNG dual H-bridge sits between the ESP32 logic and the motors. Two direction pins per channel set forward or reverse; one PWM pin per channel sets speed. For differential steering, equal duty on both channels drives straight; unequal duty turns gently; reversing one channel spins in place. KANDA maps abstract LLM verbs (\textit{forward}, \textit{slight\_left}, \textit{right}) to specific combinations of direction bits and PWM values in firmware, so the language model never deals with pin-level hardware.
 
 %-------------------------------------------------------------------
 \section{Inter-Processor Communication over UART}
 \label{sec:uart}
 
-\textbf{UART} (Universal Asynchronous Receiver-Transmitter) serial communication transmits framed bytes over TX/RX lines using an agreed baud rate (115,200 in KANDA). No separate clock line is required when timing is matched at both ends. JSON lines terminate with newline delimiters for message boundaries: telemetry from ESP32 to Pi, commands from Pi to ESP32.
+UART serial at 115,200 baud connects the Raspberry Pi and ESP32 with just two wires (TX and RX, plus ground). No clock line, no protocol negotiation; bytes flow at the agreed rate with start and stop framing. I chose newline-terminated JSON as the message format for a practical reason: it is human-readable in a serial monitor, which saved hours during early integration when half the bugs were bad baud rates or swapped TX/RX wires.
 
-Structured commands reduce ambiguity compared to free text and permit robust parsing on resource-constrained firmware alongside optional ArduinoJson validation.
+
+The Pi sends one JSON object per line: \textit{\{"action":"forward","speed":120\}}. The ESP32 replies with sensor telemetry in a fixed ASCII format: \textit{F:30.5 L:21.0 R:16.4 -> FORWARD}. Both sides use newline as the message delimiter. ArduinoJson parses the inbound line on the ESP32; Python's \textit{json.loads} handles it on the Pi. The simplicity of this protocol (no handshake, no sequence numbers, no retransmission) means occasional dropped bytes produce a parse failure that the validator catches and maps to stop. Reliability through simplicity.
 
 %-------------------------------------------------------------------
 \section{Safety Validation for LLM-Generated Actions}
 \label{sec:safety_theory}
 
-Physical robots impose hard constraints: motors cannot execute undefined verbs; excessive speed risks collision or electrical stress; invalid JSON must not crash control loops. KANDA therefore implements \textbf{runtime validation}: (1)~schema and type checks on the parsed command; (2)~membership of \texttt{action} in a fixed set; (3)~numeric clamping of \texttt{speed} to $[0,255]$; (4)~fallback to \texttt{stop} on any fault.
+Language models hallucinate. They invent actions that do not exist, propose speeds that exceed hardware limits, wrap JSON in markdown fences, or occasionally return poetry instead of motor commands. KANDA assumes every LLM output is adversarial until proven otherwise.
 
-This aligns with the broader principle that AI-generated plans for cyber-physical systems require enforcement layers~\cite{huang2023grounded,ahn2022saycan}. The validator acts as a sandbox between stochastic LLM output and deterministic hardware.
+The validator implements four checks in sequence: (1)~is the output a dictionary with the right keys? (2)~is the action one of seven known verbs? (3)~can the speed field be parsed as an integer? (4)~is that integer within $[0,255]$? Failure at any stage produces a safe stop command. Speed values outside the range but otherwise valid get clamped rather than rejected, so ``speed 300'' becomes ``speed 255'' rather than a full stop. This design treats the validator as a total function: it always terminates, always returns a legal command, and never throws~\cite{huang2023grounded,ahn2022saycan}.
+
+The firmware adds a second, independent safety layer. Even if the Pi's validator somehow passes a forward command while an obstacle sits 10\,cm ahead, the ESP32's own loop checks the front sensor and overrides with a stop. Two independent checks, running on separate processors, make single-point failure of safety essentially impossible for the collision case.
 
 %-------------------------------------------------------------------
-\section{Multimodal Extension (Conceptual)}
+\section{Multimodal Extension}
 \label{sec:multimodal}
 
-Socratic Models~\cite{zeng2023socratic} compose multiple foundation models via natural language. KANDA's roadmap (Phase~4) follows this direction: camera and speech modalities would extend the prompt while preserving the same validation boundary. Works on long-horizon LLM control~\cite{wake2023gptrobot} and household assistance~\cite{wu2023tidybot} inform future scaling beyond single-step JSON commands.
+Phase~4 of KANDA adds a camera, microphone, and speaker, turning it from a text-controlled rover into a multimodal agent. The conceptual basis draws from several 2022--2023 systems.
+
+Wake et al.~\cite{wake2023gptrobot} showed that ChatGPT can plan multi-step robot actions in diverse environments when given adequate scene descriptions. Wu et al.~\cite{wu2023tidybot} built a robot that learns personal preferences via language, deciding where specific objects belong in a household. Zeng et al.~\cite{zeng2023socratic} composed separately trained models (vision, language, audio) by passing natural-language summaries between them, requiring no joint training. Huang et al.~\cite{huang2022innermonologue} fed observation text back into the planner so the robot could notice when actions failed and try alternatives.
+
+KANDA's search algorithm combines these ideas: the vision model describes each captured frame, the text model decides whether the target is visible and which direction to explore next, and episodic memory prevents the robot from revisiting scenes it has already checked. The entire loop stays within the same validation boundary that governs simple motion commands, so even during a 20-step search, every individual movement passes through the safety validator before reaching the wheels.
 
 %-------------------------------------------------------------------
 \section{Summary}
 \label{sec:ch2summary}
 
-This chapter established the theoretical basis for KANDA. Embodied AI and affordance grounding~\cite{driess2023palme,ahn2022saycan,brohan2023rt2} motivate coupling language reasoning with hardware-aware commands. Transformer-based LLMs~\cite{vaswani2017attention} and robotics-oriented prompting practices~\cite{vemprala2024chatgpt,liang2023code,singh2023progprompt} justify the context-builder design; grounded decoding ideas~\cite{huang2023grounded} motivate post-hoc validation. The sense--reason--act pattern~\cite{brooks1986robust} organises the runtime loop. Ultrasonic time-of-flight sensing, PWM motor drive via ESP32~\cite{espressif2023esp32}, and UART-delimited JSON provide the physical and communication substrate. Finally, command-level safety filtering ensures that only feasible actions reach the actuators, completing the conceptual bridge between LLM reasoning and embodied execution.
+The theoretical basis of KANDA spans classical robotics and frontier AI. From Brooks~\cite{brooks1986robust} we take the principle that reflexes must be fast and independent of slow planning. From the latest embodied LLM work~\cite{vemprala2024chatgpt,driess2023palme,brohan2023rt2} we borrow the idea of conditioning model outputs on hardware context and sensor state. From ReAct~\cite{yao2023react} and Inner Monologue~\cite{huang2022innermonologue} we take observation-driven replanning for multi-step tasks. The ultrasonic sensors, PWM motor control, UART protocol, and runtime validator are not theoretically novel (they are well-understood engineering) but combining them with cloud-hosted LLMs in a coherent, safe architecture on a sub-\$77 platform is the contribution this project demonstrates.

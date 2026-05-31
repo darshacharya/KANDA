@@ -120,7 +120,8 @@
         \vspace{12pt}
     Autonomous mobile robots have traditionally relied on rule-based control systems that map sensor inputs to motor outputs through hand-crafted conditional logic. While effective for narrow, well-defined environments, such systems lack the ability to reason about novel situations, interpret ambiguous stimuli, or adapt behaviour based on contextual understanding. Simultaneously, Large Language Models (LLMs) have demonstrated remarkable contextual reasoning and structured output generation capabilities, but deploying them for real-time robot control requires bridging the semantic gap between language-based reasoning and physical hardware constraints. Without explicit hardware grounding, LLMs may generate physically impossible, unsafe, or malformed commands that cannot be executed by the robot's actuators.
 
-    In this work, we present Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA), a multimodal embodied robot agent powered by LLMs with hardware-aware action generation. The system implements a dual-processor architecture in which an ESP32 microcontroller serves as the physical executor (body) handling real-time sensor acquisition and motor control, while a Raspberry Pi serves as the cognitive reasoner (brain) running Google Gemini 2.5 Flash. The system operates as a closed-loop sense--reason--validate--act pipeline: three ultrasonic sensors measure the environment, telemetry is transmitted via UART to the Raspberry Pi, a hardware-description prompt encoding the robot's capabilities and constraints aligns model behaviour with the physical platform, the model returns a structured JSON motion command, and a deterministic safety layer validates and clamps that command before driving the motors---closing the gap between open-ended language-model outputs and hard actuator constraints. The safety validator enforces an action whitelist, clamps speed to the permissible range, and substitutes a safe fallback on any validation failure. The ESP32 firmware implements dual-mode operation, automatically falling back to rule-based obstacle avoidance when the LLM is unavailable. The system was built on commodity hardware at a total cost below \$50, demonstrating that LLM-driven embodied intelligence is achievable without specialised robotic platforms or GPU-equipped onboard computers.
+    In this work, I present Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA), a multimodal embodied robot agent powered by LLMs with hardware-aware action generation. The system implements a dual-processor architecture in which an ESP32 microcontroller serves as the physical executor (body) handling real-time sensor acquisition and motor control, while a Raspberry Pi serves as the cognitive reasoner (brain) running Groq Llama~3.3 for text reasoning and NVIDIA NIM Llama~3.2 Vision for visual understanding. The system operates as a closed-loop sense--reason--validate--act pipeline: three ultrasonic sensors measure the environment, telemetry is transmitted via UART to the Raspberry Pi, a hardware-description prompt encoding the robot's capabilities and constraints aligns model behaviour with the physical platform, the model returns a structured JSON motion command, and a deterministic safety layer validates and clamps that command before driving the motors, closing the gap between open-ended language-model outputs and hard actuator constraints. The safety validator enforces an action whitelist, clamps speed to the permissible range, and substitutes a safe fallback on any validation failure. The ESP32 firmware implements dual-mode operation, automatically falling back to rule-based obstacle avoidance when the LLM is unavailable. The system was built on commodity hardware at a total cost below \$77, demonstrating that LLM-driven embodied intelligence is achievable without specialised robotic platforms or GPU-equipped onboard computers.
+    
     
         % ---- TABLE OF CONTENTS ----
         \newpage
@@ -136,15 +137,17 @@
         }
         \tableofcontents
     
-        % ---- LIST OF FIGURES ----
-        \newpage
-        \listoffigures
-        \addcontentsline{toc}{chapter}{List of Figures}
-    
-        % ---- LIST OF TABLES ----
-        \newpage
-        \listoftables
-        \addcontentsline{toc}{chapter}{List of Tables}
+     % ---- LIST OF FIGURES ----
+    \clearpage
+    \phantomsection
+    \addcontentsline{toc}{chapter}{List of Figures}
+    \listoffigures
+
+    % ---- LIST OF TABLES ----
+    \clearpage
+    \phantomsection
+    \addcontentsline{toc}{chapter}{List of Tables}
+    \listoftables
     
         % ---- GLOSSARY ----
         \newpage
@@ -154,8 +157,9 @@
         \addcontentsline{toc}{chapter}{Glossary}
         \vspace{12pt}
     
-        \begin{longtable}{@{}l@{\hspace{1em}:\hspace{1em}}l@{}}
-        KANDA  & Knowledge-driven Autonomous Navigation and Decision-making Agent \\
+    \begin{longtable}{@{}l@{\hspace{1em}:\hspace{1em}}l@{}}
+    \textbf{Term} & \textbf{Description} \\[4pt]
+    KANDA  & Knowledge-driven Autonomous Navigation and Decision-making Agent \\
         LLM    & Large Language Model \\
         AI     & Artificial Intelligence \\
         API    & Application Programming Interface \\

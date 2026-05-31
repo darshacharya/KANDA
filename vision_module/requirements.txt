@@ -1,7 +1,7 @@
-google-genai
 picamera2
 Pillow
 pyaudio
 pyserial
 openwakeword
 numpy
+gTTS

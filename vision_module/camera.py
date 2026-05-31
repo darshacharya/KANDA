@@ -12,6 +12,7 @@ import logging
 import time
 from typing import Optional
 
+import numpy as np
 from picamera2 import Picamera2
 from PIL import Image
 
@@ -42,7 +43,11 @@ class Camera:
         if not self._running:
             return None
         array = self._picam2.capture_array()
-        img = Image.fromarray(array)
+        # picamera2 "RGB888" actually stores pixels as BGR in memory on Pi
+        # (libcamera convention). Reverse channels so PIL gets true RGB.
+        if array.ndim == 3 and array.shape[2] == 3:
+            array = array[:, :, ::-1]
+        img = Image.fromarray(array, mode="RGB")
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=config.CAMERA_JPEG_QUALITY)
         return buf.getvalue()

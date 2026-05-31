@@ -1,21 +1,18 @@
 """
 KANDA Vision Module — Vision-Language Model
-Sends camera frames to Gemini for scene understanding and speaks the result.
+Sends camera frames to NVIDIA NIM for scene understanding.
 
-Uses the new google-genai SDK (replaces deprecated google.generativeai).
+Provider: NVIDIA NIM (40 req/min free, LLaMA 3.2 Vision)
 
 Test standalone:
-    export GEMINI_API_KEY=your_key
     python3 vlm.py
 """
 
-import base64
+import json
 import logging
 import time
+import urllib.request
 from typing import Optional
-
-from google import genai
-from google.genai import types
 
 import config
 
@@ -27,48 +24,67 @@ _SCENE_PROMPT = """Describe this image in 1 short sentence (under 15 words). Jus
 
 class VLM:
     def __init__(self):
-        if not config.GEMINI_API_KEY:
-            raise ValueError(
-                "GEMINI_API_KEY not set. Run: export GEMINI_API_KEY=your_key"
-            )
-        self._client = genai.Client(api_key=config.GEMINI_API_KEY)
+        if not config.NVIDIA_API_KEY:
+            raise ValueError("NVIDIA_API_KEY not set — required for VLM")
         self._last_description: Optional[str] = None
         self._last_time: float = 0
-        logger.info("VLM initialized with model: %s", config.GEMINI_MODEL)
+        logger.info("VLM initialized: NVIDIA NIM (%s)", config.NVIDIA_VLM_MODEL)
 
-    def describe_scene(self, image_b64: str) -> Optional[str]:
+    def describe_scene(self, image_b64: str, prompt: str = None) -> Optional[str]:
         """
-        Send image to Gemini, get a spoken description of the scene.
+        Send image for description via NVIDIA NIM.
 
         Args:
             image_b64: base64-encoded JPEG from camera
+            prompt: optional custom prompt (defaults to scene description)
 
         Returns:
             Natural language description string, or None on failure
         """
-        try:
-            image_bytes = base64.b64decode(image_b64)
+        text_prompt = prompt or _SCENE_PROMPT
+        description = self._call_nvidia(image_b64, text_prompt)
 
-            response = self._client.models.generate_content(
-                model=config.GEMINI_MODEL,
-                contents=[
-                    _SCENE_PROMPT,
-                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                ],
-                config=types.GenerateContentConfig(
-                    temperature=0.7,
-                    max_output_tokens=300,
-                ),
-            )
-
-            description = response.text.strip()
+        if description:
             self._last_description = description
             self._last_time = time.time()
             logger.info("Scene: %s", description)
-            return description
 
-        except Exception as exc:
-            logger.error("VLM failed: %s", exc)
+        return description
+
+    def _call_nvidia(self, image_b64: str, prompt: str) -> Optional[str]:
+        """Call NVIDIA NIM Qwen VLM with base64 image."""
+        try:
+            payload = json.dumps({
+                "model": config.NVIDIA_VLM_MODEL,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_b64}"
+                        }},
+                    ],
+                }],
+                "max_tokens": 300,
+                "temperature": 0.7,
+            }).encode()
+
+            req = urllib.request.Request(
+                config.NVIDIA_ENDPOINT,
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {config.NVIDIA_API_KEY}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "KANDA/1.0",
+                },
+            )
+            resp = urllib.request.urlopen(req, timeout=30)
+            data = json.loads(resp.read())
+            text = data["choices"][0]["message"]["content"].strip()
+            logger.info("[nvidia-vlm] OK")
+            return text
+        except Exception as e:
+            logger.error("[nvidia-vlm] failed: %s", e)
             return None
 
     def should_update(self) -> bool:
@@ -97,7 +113,7 @@ if __name__ == "__main__":
         exit(1)
 
     print(f"Frame captured ({len(b64)} chars base64)")
-    print("Sending to Gemini...")
+    print("Sending to NVIDIA NIM...")
     print()
 
     vlm = VLM()

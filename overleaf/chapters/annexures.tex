@@ -1,0 +1,186 @@
+% ================================================================
+%  Annexures — KANDA Project
+% ================================================================
+\chapter*{ANNEXURE}
+\markboth{Annexure}{}
+\addcontentsline{toc}{chapter}{Annexure}
+\label{ch:annexures}
+\setcounter{section}{0}
+\renewcommand{\thesection}{\arabic{section}}
+
+%-------------------------------------------------------------------
+\section{Pin Configuration and Wiring}
+\label{sec:pinout}
+
+\textbf{Table~\ref{tab:esp32_pins}} documents the ESP32 GPIO assignments used in the firmware.
+
+\begin{table}[H]
+\centering
+\caption[ESP32 GPIO pin assignments]{\textbf{ESP32 GPIO pin assignments}}
+\label{tab:esp32_pins}
+\begin{tabularx}{\textwidth}{|l|l|X|}
+\hline
+\textbf{GPIO} & \textbf{Function} & \textbf{Notes} \\
+\hline
+5 & Front ultrasonic TRIG & 3.3V output \\
+\hline
+18 & Front ultrasonic ECHO & 5V$\to$3.3V divider \\
+\hline
+19 & Left ultrasonic TRIG & 3.3V output \\
+\hline
+21 & Left ultrasonic ECHO & 5V$\to$3.3V divider \\
+\hline
+22 & Right ultrasonic TRIG & 3.3V output \\
+\hline
+23 & Right ultrasonic ECHO & 5V$\to$3.3V divider \\
+\hline
+25 & Motor A IN1 & TB6612FNG direction \\
+\hline
+26 & Motor A IN2 & TB6612FNG direction \\
+\hline
+27 & Motor A PWM & LEDC channel 0, 1 kHz \\
+\hline
+32 & Motor B IN1 & TB6612FNG direction \\
+\hline
+33 & Motor B IN2 & TB6612FNG direction \\
+\hline
+14 & Motor B PWM & LEDC channel 1, 1 kHz \\
+\hline
+SDA (21) & OLED SDA & I\textsuperscript{2}C, address 0x3C \\
+\hline
+SCL (22) & OLED SCL & Shared with Right TRIG (multiplexed) \\
+\hline
+TX (1) & UART TX to Pi & 115200 baud \\
+\hline
+RX (3) & UART RX from Pi & 115200 baud \\
+\hline
+\end{tabularx}
+\end{table}
+
+%-------------------------------------------------------------------
+\section{Firmware Source Code (Excerpt)}
+\label{sec:fw_code}
+
+The following excerpt shows the core control loop of the ESP32 firmware including sensor reading, mode switching, and command execution.
+
+\begin{lstlisting}[language=C++, caption={ESP32 firmware main loop (simplified)}, label={lst:fw_main}]
+void loop() {
+  // 1. Read ultrasonic sensors
+  float front = readUltrasonic(TRIG_F, ECHO_F);
+  float left  = readUltrasonic(TRIG_L, ECHO_L);
+  float right = readUltrasonic(TRIG_R, ECHO_R);
+
+  // 2. Send telemetry to Pi
+  Serial.printf("F:%.1f L:%.1f R:%.1f -> %s\n",
+                front, left, right, modeLabel);
+
+  // 3. Check for AI commands
+  if (Serial.available()) {
+    String line = Serial.readStringUntil('\n');
+    if (executeAiCommand(line)) {
+      currentMode = AI_MODE;
+      lastAiTime = millis();
+    }
+  }
+
+  // 4. Mode timeout check
+  if (currentMode == AI_MODE &&
+      millis() - lastAiTime > AI_TIMEOUT_MS) {
+    currentMode = AUTO_MODE;
+  }
+
+  // 5. Execute based on mode
+  if (currentMode == AUTO_MODE) {
+    autoObstacleAvoidance(front, left, right);
+  }
+
+  // 6. Safety reflex (overrides everything)
+  if (front < EMERGENCY_STOP_CM) {
+    stopMotors();
+  }
+
+  updateOLED(currentMode, front);
+  delay(LOOP_DELAY_MS);
+}
+\end{lstlisting}
+
+%-------------------------------------------------------------------
+\section{Intelligence Layer Source Code (Excerpt)}
+\label{sec:ai_code}
+
+The following excerpt shows the Python orchestrator control cycle on the Raspberry Pi.
+
+\begin{lstlisting}[language=Python, caption={Intelligence layer main loop (simplified)}, label={lst:ai_main}]
+def run_cycle(bridge, agent, validator):
+    telemetry = bridge.read_telemetry()
+    if telemetry is None:
+        bridge.send_command("stop", 0)
+        return
+
+    prompt = build_prompt(telemetry)
+    response = agent.get_action(prompt)
+    safe_cmd = validator.validate(response)
+    bridge.send_command(
+        safe_cmd["action"],
+        safe_cmd["speed"]
+    )
+
+def main():
+    bridge = UARTBridge(config.SERIAL_PORT)
+    bridge.connect()
+    agent = TaskAgent()
+    validator = SafetyValidator()
+
+    signal.signal(signal.SIGINT,
+                  lambda *_: shutdown(bridge))
+
+    while running:
+        try:
+            run_cycle(bridge, agent, validator)
+        except Exception as e:
+            logger.error(f"Cycle error: {e}")
+            bridge.send_command("stop", 0)
+        time.sleep(config.LOOP_INTERVAL_SEC)
+\end{lstlisting}
+
+%-------------------------------------------------------------------
+\section{Raspberry Pi to ESP32 Wiring Diagram}
+\label{sec:wiring}
+
+\begin{table}[H]
+\centering
+\caption[UART wiring between Pi and ESP32]{\textbf{UART wiring between Raspberry Pi and ESP32}}
+\label{tab:uart_wiring}
+\begin{tabularx}{\textwidth}{|l|l|X|}
+\hline
+\textbf{Raspberry Pi} & \textbf{ESP32} & \textbf{Notes} \\
+\hline
+GPIO 14 (TX) & GPIO 3 (RX) & Pi TX to ESP32 RX \\
+\hline
+GPIO 15 (RX) & GPIO 1 (TX) & ESP32 TX to Pi RX \\
+\hline
+GND & GND & Common ground required \\
+\hline
+\end{tabularx}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption[Power distribution]{\textbf{Power distribution}}
+\label{tab:power}
+\begin{tabularx}{\textwidth}{|l|l|X|}
+\hline
+\textbf{Component} & \textbf{Supply} & \textbf{Source} \\
+\hline
+Raspberry Pi 4 & 5V 3A & Buck converter from LiPo \\
+\hline
+ESP32 DevKit & 5V (USB or Vin) & Buck converter from LiPo \\
+\hline
+TB6612FNG motors & 7.4V direct & LiPo battery (2S) \\
+\hline
+HC-SR04 sensors & 5V & Shared 5V rail \\
+\hline
+SSD1306 OLED & 3.3V & ESP32 3.3V regulator \\
+\hline
+\end{tabularx}
+\end{table}

@@ -2,10 +2,10 @@
 %  Chapter 3 — Software Requirement Specification
 %  KANDA (Knowledge-driven Autonomous Navigation and Decision-making Agent)
 % ================================================================
-\chapter{Software Requirement Specification}
+\chapter{SOFTWARE REQUIREMENT SPECIFICATION}
 \label{ch:srs}
 
-This chapter presents the Software Requirement Specification (SRS) for \textbf{Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA)}. It documents the product perspective, functions, user classes, constraints, and both functional and non-functional requirements for the dual-layer system (ESP32 embodiment layer and Raspberry Pi intelligence layer). The SRS is the formal contract between system design and implementation. Design principles follow established robotics-LLM practice for grounding LLM outputs in robot capabilities~\cite{vemprala2024chatgpt,ahn2022saycan}.
+This chapter presents the Software Requirement Specification (SRS) for Knowledge-driven Autonomous Navigation and Decision-making Agent (KANDA). It documents the product perspective, functions, user classes, constraints, and both functional and non-functional requirements for the dual-layer system (ESP32 embodiment layer and Raspberry Pi intelligence layer). The SRS is the formal contract between system design and implementation. Design principles follow established robotics-LLM practice for grounding LLM outputs in robot capabilities~\cite{vemprala2024chatgpt,ahn2022saycan}.
 
 %-------------------------------------------------------------------
 \section{Overall Description}
@@ -18,42 +18,42 @@ This chapter presents the Software Requirement Specification (SRS) for \textbf{K
 KANDA is a standalone embedded robotic system consisting of two cooperating software stacks:
 
 \begin{itemize}[nosep]
-  \item \textbf{Embodiment firmware (ESP32):} Arduino-compatible C++ firmware under \path|firmware/phase2_obstacle_avoidance/| on an ESP32 DevKit. It performs ultrasonic sensing, motor PWM control via TB6612FNG, SSD1306 OLED display updates, and UART messaging with the companion computer.
+  \item Embodiment firmware (ESP32): Arduino-compatible C++ firmware on an ESP32 DevKit. It performs ultrasonic sensing, motor PWM control via TB6612FNG, SSD1306 OLED display updates, and UART messaging with the companion computer.
 
-  \item \textbf{Intelligence layer (Raspberry Pi):} Python modules in \path|vision_module/| that read telemetry from the serial port, compose a hardware-aware prompt, call Groq (for text reasoning and speech-to-text) or NVIDIA NIM (for visual scene understanding), validate the returned JSON command, and transmit it to the ESP32.
+  \item Intelligence layer (Raspberry Pi): Python modules in \textit{vision\_module/} that read telemetry from the serial port, compose a hardware-aware prompt, call Groq (for text reasoning and speech-to-text) or NVIDIA NIM (for visual scene understanding), validate the returned JSON command, and transmit it to the ESP32.
 
 \end{itemize}
 
 The system interfaces with the following external services and components:
 
 \begin{itemize}[nosep]
-  \item \textbf{Groq API:} Cloud-hosted Groq inference service running \texttt{llama-3.3-70b-versatile}. Handles text reasoning (motion planning) and automatic speech recognition (ASR). Free tier: 30 requests/min effectively unlimited in practice. Accessed via OpenAI-compatible REST endpoint; requires \texttt{GROQ\_API\_KEY} environment variable.
+  \item Groq API: Cloud-hosted Groq inference service running \textit{llama-3.3-70b-versatile}. Handles text reasoning (motion planning) and automatic speech recognition (ASR). Free tier: 30 requests/min effectively unlimited in practice. Accessed via OpenAI-compatible REST endpoint; requires \textit{GROQ\_API\_KEY} environment variable.
 
-  \item \textbf{NVIDIA NIM API:} Cloud-hosted NVIDIA model service running \texttt{meta/llama-3.2-11b-vision-instruct}. Handles visual scene understanding and object detection. Free tier: 40 requests/min. Accessed via OpenAI-compatible REST endpoint; requires \texttt{NVIDIA\_API\_KEY} environment variable.
+  \item NVIDIA NIM API: Cloud-hosted NVIDIA model service running \textit{meta/llama-3.2-11b-vision-instruct}. Handles visual scene understanding and object detection. Free tier: 40 requests/min. Accessed via OpenAI-compatible REST endpoint; requires \textit{NVIDIA\_API\_KEY} environment variable.
 
-  \item \textbf{Google TTS (gtts):} Optional cloud text-to-speech service for natural-sounding speech output. Runs on-demand, no API key required, but needs internet. Fallback: offline \texttt{espeak-ng} for robotic fallback voice.
+  \item Google TTS (gtts): Optional cloud text-to-speech service for natural-sounding speech output. Runs on-demand, no API key required, but needs internet. Fallback: offline \textit{espeak-ng} for robotic fallback voice.
 
-  \item \textbf{UART link:} Serial connection between Raspberry Pi and ESP32 at 115,200 baud. The device path is set via \texttt{KANDA\_SERIAL\_PORT} (for example \path|/dev/ttyS0| or \path|/dev/ttyUSB0|).
+  \item UART link: Serial connection between Raspberry Pi and ESP32 at 115,200 baud. The device path is set via \textit{KANDA\_SERIAL\_PORT} (for example \textit{/dev/ttyS0} or \textit{/dev/ttyUSB0}).
 
-  \item \textbf{Power subsystems:} Battery, BMS, buck converter, and motor supply paths as documented in project hardware notes; software assumes stable power within component ratings.
+  \item Power subsystems: Battery, BMS, buck converter, and motor supply paths as documented in project hardware notes; software assumes stable power within component ratings.
 \end{itemize}
 
-KANDA is not a hosted web service in the deployed configuration; the Pi runs the AI layer as a local process (e.g.\ \texttt{python3 main.py}). The architecture separates real-time control on the microcontroller from asynchronous LLM inference on the companion computer, consistent with layered embodied systems~\cite{brooks1986robust,driess2023palme}.
+KANDA is not a hosted web service in the deployed configuration; the Pi runs the AI layer as a local process (e.g.\ \textit{python3 main.py}). The architecture separates real-time control on the microcontroller from asynchronous LLM inference on the companion computer, consistent with layered embodied systems~\cite{brooks1986robust,driess2023palme}.
 
 %-------------------------------------------------------------------
 \subsection{LLM Model Selection and System Alignment}
 \label{subsec:alignment}
 
-\textbf{API services.} Two complementary cloud services handle different workloads. Groq manages text and reasoning tasks plus automatic speech recognition, running Llama 3.3 70B. NVIDIA NIM handles visual understanding, running Llama 3.2 11B Vision. Both receive structured prompts with sensor context and return task-specific outputs. The dispatch logic sends reasoning requests to Groq and visual questions to NVIDIA, rather than routing all problems to a single model.
+API services. Two complementary cloud services handle different workloads. Groq manages text and reasoning tasks plus automatic speech recognition, running Llama 3.3 70B. NVIDIA NIM handles visual understanding, running Llama 3.2 11B Vision. Both receive structured prompts with sensor context and return task-specific outputs. The dispatch logic sends reasoning requests to Groq and visual questions to NVIDIA, rather than routing all problems to a single model.
 
-\textbf{Why two services?} Earlier versions used Gemini 2.5 Flash as a single LLM. Specialization proved more effective. Dedicated text models are faster for reasoning. Dedicated vision models handle visual questions better. When one service reaches its rate limit, the robot switches to the other and continues working instead of blocking.
+Why two services? Earlier versions used Gemini 2.5 Flash as a single LLM. Specialization proved more effective. Dedicated text models are faster for reasoning. Dedicated vision models handle visual questions better. When one service reaches its rate limit, the robot switches to the other and continues working instead of blocking.
 
-\textbf{Keeping the model honest (three layers of grounding).} Safety depends on multiple independent checks. Each layer addresses different failure modes:
+Keeping the model honest (three layers of grounding). Safety depends on multiple independent checks. Each layer addresses different failure modes:
 
 \begin{enumerate}[label=\arabic*., nosep]
-  \item \textbf{Specification alignment (prompt):} The hardware-description prompt defines the action grammar, speed bounds, sensor semantics, and explicit safety rules. This makes the prompt match what the platform can actually do~\cite{ahn2022saycan,vemprala2024chatgpt}.
-  \item \textbf{Decoding alignment (generation):} Low temperature sampling and JSON-only output reduce variance and make parsing simple on the microcontroller~\cite{}.
-  \item \textbf{Runtime alignment (validation):} Every command passes through the validator before actuation. The validator enforces a finite action set and clamps numeric values~\cite{huang2023grounded}.
+  \item Specification alignment (prompt): The hardware-description prompt defines the action grammar, speed bounds, sensor semantics, and explicit safety rules. This makes the prompt match what the platform can actually do~\cite{ahn2022saycan,vemprala2024chatgpt}.
+  \item Decoding alignment (generation): Low temperature sampling and JSON-only output reduce variance and make parsing simple on the microcontroller~\cite{}.
+  \item Runtime alignment (validation): Every command passes through the validator before actuation. The validator enforces a finite action set and clamps numeric values~\cite{huang2023grounded}.
 \end{enumerate}
 
 Each layer catches different problems. Sensor data informs the prompt, the model proposes an action, and the validator stops anything unsafe before it reaches the motors.
@@ -64,43 +64,48 @@ Each layer catches different problems. Sensor data informs the prompt, the model
 
 The primary functions of KANDA are:
 
-\textbf{F1, Proximity sensing:} Sample three HC-SR04 ultrasonic sensors (front, left, right) each control cycle and compute distances in centimetres.
+Proximity sensing: Sample three HC-SR04 ultrasonic sensors (front, left, right) each control cycle and compute distances in centimetres.
 
-\textbf{F2, Telemetry transmission:} Format sensor readings as a single ASCII telemetry line and transmit from ESP32 to Raspberry Pi over UART for use in LLM context construction.
+Telemetry transmission: Format sensor readings as a single ASCII telemetry line and transmit from ESP32 to Raspberry Pi over UART for use in LLM context construction.
 
-\textbf{F3, Prompt construction:} Build a hardware-description prompt including valid motion primitives, speed bounds, safety rules, and current sensor readings~\cite{ahn2022saycan}.
+Prompt construction: Build a hardware-description prompt including valid motion primitives, speed bounds, safety rules, and current sensor readings~\cite{ahn2022saycan}.
 
-\textbf{F4, LLM inference:} For text-based tasks (motion planning), send the prompt to Groq Llama 3.3 70B to obtain a JSON array of motor commands. For visual tasks (object detection, scene questions), send the image and prompt to NVIDIA NIM Llama 3.2 11B Vision to get yes/no or descriptive answers. Both use low temperature (greedy decoding) and structured JSON output.
+LLM inference: For text-based tasks (motion planning), send the prompt to Groq Llama 3.3 70B to obtain a JSON array of motor commands. For visual tasks (object detection, scene questions), send the image and prompt to NVIDIA NIM Llama 3.2 11B Vision to get yes/no or descriptive answers. Both use low temperature (greedy decoding) and structured JSON output.
 
-\textbf{F5, Command validation:} Verify action membership in the configured whitelist, coerce speed to integer, clamp to $[0,255]$, and substitute a safe stop command on failure~\cite{huang2023grounded}.
+Command validation: Verify action membership in the configured whitelist, coerce speed to integer, clamp to $[0,255]$, and substitute a safe stop command on failure~\cite{huang2023grounded}.
 
-\textbf{F6, Command transmission:} Serialize the validated command as one JSON line over UART to the ESP32.
+Command transmission: Serialize the validated command as one JSON line over UART to the ESP32.
 
-\textbf{F7, Motor actuation:} Parse JSON on the ESP32 and drive TB6612FNG inputs (direction + PWM) to realise forward, backward, turns, slight corrections, or stop.
+Motor actuation: Parse JSON on the ESP32 and drive TB6612FNG inputs (direction + PWM) to realise forward, backward, turns, slight corrections, or stop.
 
-\textbf{F8, Status display:} The SSD1306 OLED (128×64) shows the robot's state through an animated face. Humans instinctively look at the robot's face to understand what it's doing. Animated states make this obvious: IDLE shows a listening face, LISTENING shows a recording waveform, THINKING shows a thinking emoji, ACTING shows movement, SEARCHING shows a search pattern, SPEAKING shows a speech bubble, REPORTING shows completion. This simple feature reduced debugging time significantly, since the state was visible without reading logs.
+Status display: The SSD1306 OLED (128×64) shows the robot's state through an animated face. Humans instinctively look at the robot's face to understand what it's doing. Animated states make this obvious: IDLE shows a listening face, LISTENING shows a recording waveform, THINKING shows a thinking emoji, ACTING shows movement, SEARCHING shows a search pattern, SPEAKING shows a speech bubble, REPORTING shows completion. This simple feature reduced debugging time significantly, since the state was visible without reading logs.
 
-\textbf{F9, Dual-mode operation:} The ESP32 has two operating modes. When valid JSON arrives from the Pi, it runs in AI\_MODE and executes cloud-based decisions. If the Pi goes silent for 3 seconds (timeout: \texttt{AI\_TIMEOUT\_MS=3000}), the firmware switches to AUTO\_MODE. In AUTO\_MODE, the ESP32 runs local obstacle avoidance using the ultrasonic sensors. This fallback means if the Pi crashes or loses network, the robot keeps avoiding obstacles instead of freezing or crashing.
+Dual-mode operation: The ESP32 has two operating modes. When valid JSON arrives from the Pi, it runs in AI\_MODE and executes cloud-based decisions. If the Pi goes silent for 3 seconds (timeout: \textit{AI\_TIMEOUT\_MS=3000}), the firmware switches to AUTO\_MODE. In AUTO\_MODE, the ESP32 runs local obstacle avoidance using the ultrasonic sensors. This fallback means if the Pi crashes or loses network, the robot keeps avoiding obstacles instead of freezing or crashing.
 
-\textbf{F10, Safe shutdown:} On AI layer exit or error, send stop commands where applicable to leave the robot in a safe state.
+Safe shutdown: On AI layer exit or error, send stop commands where applicable to leave the robot in a safe state.
 
 %-------------------------------------------------------------------
 \subsection{User Classes and Characteristics}
 \label{subsec:users}
 
+\textbf{Table~\ref{tab:users}} identifies four user classes that interact with the system at different levels of technical engagement.
+
 \begin{table}[htbp!]
 \centering
-\caption{User classes and characteristics}
+\caption[User classes and characteristics]{\textbf{User classes and characteristics}}
 \label{tab:users}
-\begin{tabularx}{\textwidth}{@{}llX@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|l|l|X|}
+\hline
 \textbf{User Class} & \textbf{Technical Level} & \textbf{Description} \\
-\midrule
+\hline
 Robot Operator      & Basic          & Powers the robot, monitors OLED and behaviour, ensures clear operational space \\
+\hline
 Developer / Student & Intermediate   & Edits firmware or Python, configures serial port and API keys, flashes ESP32 \\
+\hline
 Researcher          & Intermediate   & Experiments with prompts, timing, and validation policies for embodied LLM studies \\
+\hline
 Lab Maintainer      & Advanced       & Manages hardware calibration, wiring, supply rails, and sensor mounting \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -109,17 +114,17 @@ Lab Maintainer      & Advanced       & Manages hardware calibration, wiring, sup
 \label{subsec:constraints}
 
 \begin{description}[style=nextline]
-  \item[C1, Environment] Indoor, flat-floor operation assumed for specification and testing; outdoor use is outside the baseline SRS.
+  \item[Environment] Indoor, flat-floor operation assumed for specification and testing; outdoor use is outside the baseline SRS.
 
-  \item[C2, Language] LLM prompts and documentation are English; future speech modalities are out of scope for this SRS revision.
+  \item[Language] LLM prompts and documentation are English; future speech modalities are out of scope for this SRS revision.
 
-  \item[C3, Network] Groq and NVIDIA NIM inference require outbound HTTPS. The robot maintains obstacle avoidance without cloud services by switching to AUTO\_MODE on the ESP32.
+  \item[Network] Groq and NVIDIA NIM inference require outbound HTTPS. The robot maintains obstacle avoidance without cloud services by switching to AUTO\_MODE on the ESP32.
 
-  \item[C4, Credentials] API keys must be supplied via environment variables. Source repositories contain no hard-coded secrets.
+  \item[Credentials] API keys must be supplied via environment variables. Source repositories contain no hard-coded secrets.
 
-  \item[C5, Electrical] HC-SR04 ECHO outputs are 5V; ESP32 GPIO inputs require compliant level shifting (e.g.\ resistor dividers) as implemented in hardware.
+  \item[Electrical] HC-SR04 ECHO outputs are 5V; ESP32 GPIO inputs require compliant level shifting (e.g.\ resistor dividers) as implemented in hardware.
 
-  \item[C6, Real-Time Bound] LLM latency varies and is not deterministic. The system does not assume sub-second planning. Instead, firmware timeouts and validation layers maintain safe motion limits~\cite{huang2023grounded}.
+  \item[Real-Time Bound] LLM latency varies and is not deterministic. The system does not assume sub-second planning. Instead, firmware timeouts and validation layers maintain safe motion limits~\cite{huang2023grounded}.
 \end{description}
 
 %-------------------------------------------------------------------
@@ -130,60 +135,85 @@ Lab Maintainer      & Advanced       & Manages hardware calibration, wiring, sup
 \subsection{Functional Requirements}
 \label{subsec:func_req}
 
-\begin{xltabular}{\textwidth}{@{}lXc@{}}
-\caption{Functional requirements}
+\textbf{Table~\ref{tab:func_req}} lists the fifteen functional requirements governing both layers. Each requirement is assigned a priority level (High or Medium) reflecting its importance to safe operation. High-priority items cover the core sense-reason-validate-act loop; medium-priority items address observability and configurability features that improve usability but are not safety-critical.
+
+\begin{longtable}{|l|p{11cm}|c|}
+\caption[Functional requirements]{\textbf{Functional requirements}}
 \label{tab:func_req} \\
-\toprule
+\hline
 \textbf{ID} & \textbf{Requirement} & \textbf{Priority} \\
-\midrule
+\hline
 \endfirsthead
-\caption[]{Functional requirements (continued)} \\
-\toprule
+\caption[]{\textbf{Functional requirements (continued)}} \\
+\hline
 \textbf{ID} & \textbf{Requirement} & \textbf{Priority} \\
-\midrule
+\hline
 \endhead
-\midrule
+\hline
 \multicolumn{3}{r@{}}{\textit{Continued on next page}} \\
+\hline
 \endfoot
-\bottomrule
+\hline
 \endlastfoot
 FR-01 & The embodiment layer shall sample three ultrasonic rangefinders and compute distances (cm) each control cycle & High \\
+\hline
 FR-02 & The embodiment layer shall transmit structured telemetry from ESP32 to Raspberry Pi over UART at 115,200 baud & High \\
+\hline
 FR-03 & The intelligence layer shall parse inbound telemetry into numeric front/left/right distances for prompt construction & High \\
+\hline
 FR-04 & The intelligence layer shall assemble a hardware-description prompt listing legal actions, speed bounds, safety rules, and live sensor readings & High \\
-FR-05 & The intelligence layer shall invoke Groq (text) or NVIDIA NIM (vision) as configured and obtain a response parseable as JSON with \texttt{action} and \texttt{speed} (or task-specific fields for multimodal flows) & High \\
-FR-06 & The intelligence layer shall validate each command's \texttt{action} against \texttt{VALID\_ACTIONS}, coerce \texttt{speed} to integer, and clamp to $[0,255]$ before transmission & High \\
-FR-07 & On validation failure or malformed output, the intelligence layer shall substitute a safe stop (e.g.\ \path|{"action":"stop","speed":0}|) & High \\
+\hline
+FR-05 & The intelligence layer shall invoke Groq (text) or NVIDIA NIM (vision) as configured and obtain a response parseable as JSON with \textit{action} and \textit{speed} (or task-specific fields for multimodal flows) & High \\
+\hline
+FR-06 & The intelligence layer shall validate each command's \textit{action} against \textit{VALID\_ACTIONS}, coerce \textit{speed} to integer, and clamp to $[0,255]$ before transmission & High \\
+\hline
+FR-07 & On validation failure or malformed output, the intelligence layer shall substitute a safe stop (e.g.\ \textit{\{``action'':``stop'',``speed'':0\}}) & High \\
+\hline
 FR-08 & The intelligence layer shall transmit one JSON command line per cycle to the ESP32 over the open serial port & High \\
-FR-09 & The embodiment layer shall parse inbound JSON lines and map \texttt{action} to motor primitives (forward, backward, pivot turns, slight corrections, stop) & High \\
+\hline
+FR-09 & The embodiment layer shall parse inbound JSON lines and map \textit{action} to motor primitives (forward, backward, pivot turns, slight corrections, stop) & High \\
+\hline
 FR-10 & The embodiment layer shall drive PWM and direction pins of the TB6612FNG per the commanded action and speed & High \\
+\hline
 FR-11 & The embodiment layer shall update the SSD1306 OLED with mode and status information visible to the operator & Medium \\
+\hline
 FR-12 & The embodiment layer shall enter AI\_MODE when valid JSON is received and revert to AUTO\_MODE after UART silence exceeding the configured timeout & High \\
+\hline
 FR-13 & In AUTO\_MODE, the embodiment layer shall execute rule-based obstacle avoidance using distance thresholds without cloud dependency & High \\
+\hline
 FR-14 & The intelligence layer shall support configurable loop interval and LLM timeout via central configuration & Medium \\
+\hline
 FR-15 & The intelligence layer shall log errors and command safe stop behaviour when telemetry is missing, serial I/O fails, or the LLM call raises an exception & High \\
-\end{xltabular}
+\end{longtable}
 
 %-------------------------------------------------------------------
 \subsection{Performance Requirements}
 \label{subsec:perf_req}
 
+\textbf{Table~\ref{tab:perf_req}} specifies measurable performance targets.
+
 \begin{table}[H]
 \centering
-\caption{Performance requirements}
+\caption[Performance requirements]{\textbf{Performance requirements}}
 \label{tab:perf_req}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.2cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+\hline
 \textbf{ID} & \textbf{Metric} & \textbf{Target / threshold} \\
-\midrule
+\hline
 PR-01 & Ultrasonic ranging (single sensor, one ping) & Complete within sensor timing budget ($<$40\,ms typical) \\
+\hline
 PR-02 & UART throughput & 115,200 baud sustained \\
-PR-03 & AI layer control loop period & Default 2.0\,s between cycles (\texttt{LOOP\_INTERVAL\_SEC}) \\
-PR-04 & LLM inference budget & Complete within 8.0\,s before fallback (\texttt{LLM\_TIMEOUT\_SEC}) \\
-PR-05 & Firmware AI\_MODE watchdog & Revert to AUTO\_MODE after 5000\,ms without valid JSON (\texttt{AI\_TIMEOUT\_MS}) \\
+\hline
+PR-03 & AI layer control loop period & Default 2.0\,s between cycles (\textit{LOOP\_INTERVAL\_SEC}) \\
+\hline
+PR-04 & LLM inference budget & Complete within 8.0\,s before fallback (\textit{LLM\_TIMEOUT\_SEC}) \\
+\hline
+PR-05 & Firmware AI\_MODE watchdog & Revert to AUTO\_MODE after 5000\,ms without valid JSON (\textit{AI\_TIMEOUT\_MS}) \\
+\hline
 PR-06 & OLED refresh & Readable update on each major state change \\
+\hline
 PR-07 & Serial port stabilisation (cold start) & Allow $\approx$2\,s after opening the port on the Pi \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -191,22 +221,30 @@ PR-07 & Serial port stabilisation (cold start) & Allow $\approx$2\,s after openi
 \subsection{Software Requirements}
 \label{subsec:sw_req}
 
+\textbf{Table~\ref{tab:sw_req}} lists the software dependencies for both layers.
+
 \begin{table}[H]
 \centering
-\caption{Software requirements}
+\caption[Software requirements]{\textbf{Software requirements}}
 \label{tab:sw_req}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|}
+\hline
 \textbf{Component} & \textbf{Requirement} \\
-\midrule
+\hline
 Embodiment toolchain & Arduino IDE or PlatformIO; ESP32 Arduino core v3+ \\
+\hline
 Firmware libraries     & Wire; Adafruit SSD1306 / GFX; ArduinoJson \\
+\hline
 Intelligence OS        & Raspberry Pi OS or compatible Linux on Raspberry Pi \\
+\hline
 Python                 & Python 3.10+ recommended \\
-LLM / VLM clients      & HTTPS to Groq (\texttt{llama-3.3-70b-versatile}) and NVIDIA NIM (\texttt{meta/llama-3.2-11b-vision-instruct}); keys \texttt{GROQ\_API\_KEY}, \texttt{NVIDIA\_API\_KEY} \\
-Serial I/O             & Package \texttt{pyserial} \\
-Configuration          & Env.\ vars above plus \texttt{KANDA\_SERIAL\_PORT} \\
-\bottomrule
+\hline
+LLM / VLM clients      & HTTPS to Groq (\textit{llama-3.3-70b-versatile}) and NVIDIA NIM (\textit{meta/llama-3.2-11b-vision-instruct}); keys \textit{GROQ\_API\_KEY}, \textit{NVIDIA\_API\_KEY} \\
+\hline
+Serial I/O             & Package \textit{pyserial} \\
+\hline
+Configuration          & Env.\ vars above plus \textit{KANDA\_SERIAL\_PORT} \\
+\hline
 \end{tabularx}
 \end{table}
 
@@ -214,22 +252,30 @@ Configuration          & Env.\ vars above plus \texttt{KANDA\_SERIAL\_PORT} \\
 \subsection{Hardware Requirements}
 \label{subsec:hw_req}
 
+\textbf{Table~\ref{tab:hw_req}} enumerates the minimum hardware and \textbf{Figure~\ref{fig:hw_block}} shows the interconnection topology.
+
 \begin{table}[H]
 \centering
-\caption{Hardware requirements}
+\caption[Hardware requirements]{\textbf{Hardware requirements}}
 \label{tab:hw_req}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+\hline
 \textbf{Component} & \textbf{Minimum} & \textbf{Notes} \\
-\midrule
+\hline
 ESP32 DevKit & 38-pin module & Wi-Fi-capable; GPIO set per pin map \\
+\hline
 Motor driver & TB6612FNG or equivalent dual H-bridge & Motor supply separate from logic rails \\
+\hline
 Ultrasonic sensors & 3$\times$ HC-SR04 & Dividers on ECHO lines to 3.3\,V logic \\
-Display & SSD1306 128$\times$64 I\textsuperscript{2}C & Typical address \texttt{0x3C} \\
+\hline
+Display & SSD1306 128$\times$64 I\textsuperscript{2}C & Typical address \textit{0x3C} \\
+\hline
 Raspberry Pi & Pi 3B+ or newer & Hosts intelligence layer; network needed for Groq and NVIDIA NIM \\
+\hline
 Power & LiPo, BMS, buck converter & Motors not powered from the logic regulator \\
+\hline
 USB serial link & Optional USB--UART adapter & Use if not wiring Pi UART GPIO to ESP32 \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -268,7 +314,7 @@ USB serial link & Optional USB--UART adapter & Use if not wiring Pi UART GPIO to
 \draw[bus] (esp) -- (oled);
 \draw[bus] (pwr) -- (esp);
 \end{tikzpicture}
-\caption{Hardware interconnection block diagram showing the three-tier topology: cloud, edge (Pi~4 with camera and audio), and device (ESP32 with motor driver, sensors, and display).}
+\caption[Hardware interconnection block diagram: cloud, edge, and device tiers]{\textbf{Hardware interconnection block diagram: cloud, edge, and device tiers.}}
 \label{fig:hw_block}
 \end{figure}
 
@@ -277,17 +323,17 @@ USB serial link & Optional USB--UART adapter & Use if not wiring Pi UART GPIO to
 \label{subsec:design_constraints}
 
 \begin{description}[style=nextline]
-  \item[DC-01, Structured Commands Only] The intelligence layer shall issue motor intents exclusively as single-line JSON objects with \texttt{action} and \texttt{speed}. Free-form natural language shall not be sent directly to motor routines~\cite{vemprala2024chatgpt}.
+  \item[Structured Commands Only] The intelligence layer shall issue motor intents exclusively as single-line JSON objects with \textit{action} and \textit{speed}. Free-form natural language shall not be sent directly to motor routines~\cite{vemprala2024chatgpt}.
 
-  \item[DC-02, Validation Before Motion] No LLM output shall reach GPIO/PWM without passing through the validator aligned with affordance-grounding practice~\cite{ahn2022saycan,huang2023grounded}.
+  \item[Validation Before Motion] No LLM output shall reach GPIO/PWM without passing through the validator aligned with affordance-grounding practice~\cite{ahn2022saycan,huang2023grounded}.
 
-  \item[DC-03, Bounded Action Space] The legal action set shall remain finite and enumerated in both firmware expectations and Python configuration to prevent undefined behaviours.
+  \item[Bounded Action Space] The legal action set shall remain finite and enumerated in both firmware expectations and Python configuration to prevent undefined behaviours.
 
-  \item[DC-04, Graceful Degradation] Loss of cloud connectivity or Pi process failure shall not imply undefined motion: firmware falls back to AUTO\_MODE and avoidance thresholds.
+  \item[Graceful Degradation] Loss of cloud connectivity or Pi process failure shall not imply undefined motion: firmware falls back to AUTO\_MODE and avoidance thresholds.
 
-  \item[DC-05, Observability] Serial logging on the Pi shall record cycles, errors, and safe-stop events sufficient for debugging demonstration and safety review.
+  \item[Observability] Serial logging on the Pi shall record cycles, errors, and safe-stop events sufficient for debugging demonstration and safety review.
 
-  \item[DC-06, Configurability Without Reflash (Pi)] Serial baud, model name, loop interval, and timeouts shall be adjustable via configuration or environment where feasible without rebuilding firmware.
+  \item[Configurability Without Reflash (Pi)] Serial baud, model name, loop interval, and timeouts shall be adjustable via configuration or environment where feasible without rebuilding firmware.
 \end{description}
 
 %-------------------------------------------------------------------

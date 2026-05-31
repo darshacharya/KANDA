@@ -24,17 +24,12 @@ Step types:
   wait          : pause N ms
 """
 
-import base64
 import json
 import logging
 import re
 import time
 import threading
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Optional, Callable
-
-from google import genai
-from google.genai import types
 
 import config
 from body_context import BodyContext
@@ -47,24 +42,11 @@ _MOVE_ACTIONS = {
 }
 
 
-def _gemini_call_with_timeout(fn: Callable, timeout: int = None) -> Optional[str]:
-    """Run a Gemini call with a hard timeout. Returns None on timeout/error."""
-    t = timeout or config.GEMINI_TIMEOUT_SEC
-    with ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(fn)
-        try:
-            return fut.result(timeout=t)
-        except TimeoutError:
-            logger.warning("Gemini call timed out after %ss", t)
-            return None
-        except Exception as exc:
-            logger.error("Gemini call failed: %s", exc)
-            return None
 
 
 class PlanExecutor:
     """
-    Executes a JSON plan array produced by Gemini.
+    Executes a JSON plan array produced by the AI planner (Groq).
     Handles move, speak, capture_check, loop_while, wait steps.
     Respects cancel_event to abort mid-plan.
     """
@@ -84,7 +66,6 @@ class PlanExecutor:
         self._vlm    = vlm
         self._ctx    = body_ctx
         self._cancel = cancel_event
-        self._client = genai.Client(api_key=config.GEMINI_API_KEY)
 
     # ── Public entry point ────────────────────────────────────────────────────
 
@@ -258,32 +239,17 @@ class PlanExecutor:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _ask_yes_no(self, image_b64: str, query: str) -> bool:
-        """Ask Gemini a yes/no question about the camera frame."""
+        """Ask VLM (NVIDIA NIM) a yes/no question about the camera frame."""
         prompt = (
             f"Look at this image carefully.\n"
             f"Question: {query}\n"
             f"Reply with ONLY the word 'yes' or 'no'. Nothing else."
         )
-
-        def call():
-            img_bytes = base64.b64decode(image_b64)
-            resp = self._client.models.generate_content(
-                model=config.GEMINI_MODEL,
-                contents=[
-                    prompt,
-                    types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"),
-                ],
-                config=types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=10,
-                ),
-            )
-            return resp.text.strip().lower()
-
-        answer = _gemini_call_with_timeout(call)
+        answer = self._vlm.describe_scene(image_b64, prompt=prompt)
         if answer is None:
             return False
-        return answer.startswith("yes")
+        lower = answer.lower().strip()
+        return lower.startswith("yes") or "yes" in lower.split()[:3]
 
     # Allowed pattern: "<sensor> <op> <number>"  e.g. "front > 25", "left < 15.5"
     _CONDITION_RE = re.compile(

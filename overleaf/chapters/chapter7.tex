@@ -2,68 +2,71 @@
 %  Chapter 7 — Software Testing (KANDA)
 %  Knowledge-driven Autonomous Navigation and Decision-making Agent
 % ================================================================
-\chapter{Software Testing}
+\chapter{TESTING}
 \label{ch:testing}
 
-This chapter explains how we tested KANDA to make sure it actually works and doesn't crash. Testing was in three layers: unit tests (pure Python logic), integration tests (Pi talking to ESP32), and system tests (the whole robot doing real tasks). This part of the project taught us that hardware testing takes way longer than software testing because you have to physically watch things happen. We also learned that a few simple unit tests catch most of the obvious bugs early.
+This chapter explains how I tested KANDA to make sure it actually works and doesn't crash. Testing was in three layers: unit tests (pure Python logic), integration tests (Pi talking to ESP32), and system tests (the whole robot doing real tasks). This part of the project taught me that hardware testing takes way longer than software testing because you have to physically watch things happen. I also learned that a few simple unit tests catch most of the obvious bugs early.
+
 
 %-------------------------------------------------------------------
 \section{Test Strategy and Environment}
 \label{sec:test_strategy}
 
-\textbf{What we're testing for.} We need to confirm that: (1) the Pi and ESP32 can actually talk to each other without data corruption; (2) the validator never lets through bad commands (wrong action names or speeds outside 0--255); (3) the motors respond correctly when given valid commands; (4) if something fails (network down, Gemini timeout, garbage input), the robot doesn't just freeze---it stops safely; (5) the firmware correctly switches to its own obstacle avoidance when the Pi goes silent. Essentially: can we send good commands and handle bad ones?
+What I'm testing for. I need to confirm that: (1) the Pi and ESP32 can actually talk to each other without data corruption; (2) the validator never lets through bad commands (wrong action names or speeds outside 0--255); (3) the motors respond correctly when given valid commands; (4) if something fails (network down, API timeout, garbage input), the robot doesn't just freeze, it stops safely; (5) the firmware correctly switches to its own obstacle avoidance when the Pi goes silent. Essentially: can I send good commands and handle bad ones?
 
-\textbf{Where we tested.} Unit tests run on any Linux/macOS/Windows machine with Python 3.10+ and the code checked out. Integration and system tests need the actual hardware: the ESP32, the Raspberry Pi, the sensors, motors, and OLED all wired up correctly. Tests are labeled UT-$n$ (unit—no hardware needed), IT-$n$ (integration—both processors, UART, but not necessarily full autonomy), and ST-$n$ (system—full robot, real Gemini calls, real motion).
+Where I tested. Unit tests run on any Linux/macOS/Windows machine with Python 3.10+ and the code checked out. Integration and system tests need the actual hardware: the ESP32, the Raspberry Pi, the sensors, motors, and OLED all wired up correctly. Tests are labeled UT-$n$ (unit—no hardware needed), IT-$n$ (integration—both processors, UART, but not necessarily full autonomy), and ST-$n$ (system—full robot, real cloud API calls, real motion).
+
 
 %-------------------------------------------------------------------
 \section{Unit Testing}
 \label{sec:unit_testing}
 
-Unit tests let us check the core logic without wasting time on motors, without needing the network, and without risk of the robot driving into things. We test the validator (does it reject bad commands?) and the telemetry parser (does it understand sensor data?). These tests are quick---they run in seconds and catch obvious bugs.
+Unit tests let me check the core logic without wasting time on motors, without needing the network, and without risk of the robot driving into things. I test the validator (does it reject bad commands?) and the telemetry parser (does it understand sensor data?). These tests are quick; they run in seconds and catch obvious bugs. \textbf{Tables~\ref{tab:ut_validator}} and~\textbf{\ref{tab:ut_telemetry}} document the unit test cases.
 
-\subsection[Validator module]{Test suite: safety validator (\texttt{safety\_validator.py})}
+\subsection[Validator module]{Test suite: safety validator (\textit{safety\_validator.py})}
 \label{subsec:ut_validator}
 
-The safety validator is the last line of defense before motors turn on. It needs to reject garbage and clamp speeds. We test it with a built-in list of cases: valid forward, speeds too high (clamped to 255), speeds too low (clamped to 0), made-up action names (mapped to stop), and malformed input (also mapped to stop). Running \texttt{python3 safety\_validator.py} prints the results so we can visually verify they're right.
+The safety validator is the last line of defense before motors turn on. It needs to reject garbage and clamp speeds. I test it with a built-in list of cases: valid forward, speeds too high (clamped to 255), speeds too low (clamped to 0), made-up action names (mapped to stop), and malformed input (also mapped to stop). Running \textit{python3 safety\_validator.py} prints the results so I can visually verify they're right.
+
 
 \begin{table}[H]
 \centering
-\caption{Representative unit test: command validation}
+\caption[Representative unit test: command validation]{\textbf{Representative unit test: command validation}}
 \label{tab:ut_validator}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|X|}
+\hline
 \textbf{Field} & \textbf{Description} \\
-\midrule
-Test ID & UT-01 \\
-Objective & Invalid or malformed commands map to a safe stop; in-range speeds pass; out-of-range speeds clamp. \\
-Input & Dictionaries as in the built-in case list (e.g.\ invalid action \texttt{fly} with speed~100; \texttt{forward} with speed~300). \\
-Procedure & Execute \texttt{validate(cmd)} for each case; compare returned \texttt{action} and \texttt{speed} to expectations. \\
-Expected & Unknown action or non-dict $\rightarrow$ \texttt{stop}, speed 0; forward with 300 $\rightarrow$ forward, 255; forward with $-10$ $\rightarrow$ forward, 0. \\
-Observed & Matches implementation in repository; all listed cases behave as specified. \textbf{Pass} (when script run after code changes). \\
-\bottomrule
+\hline
+Test ID & UT-01 \\ \hline
+Objective & Invalid or malformed commands map to a safe stop; in-range speeds pass; out-of-range speeds clamp. \\ \hline
+Input & Dictionaries as in the built-in case list (e.g.\ invalid action \textit{fly} with speed~100; \textit{forward} with speed~300). \\ \hline
+Procedure & Execute \textit{validate(cmd)} for each case; compare returned \textit{action} and \textit{speed} to expectations. \\ \hline
+Expected & Unknown action or non-dict $\rightarrow$ \textit{stop}, speed 0; forward with 300 $\rightarrow$ forward, 255; forward with $-10$ $\rightarrow$ forward, 0. \\ \hline
+Observed & Matches implementation in repository; all listed cases behave as specified. Pass (when script run after code changes). \\
+\hline
 \end{tabularx}
 \end{table}
 
-\subsection[Telemetry parsing]{Test suite: telemetry line parsing (\texttt{uart\_bridge.py})}
+\subsection[Telemetry parsing]{Test suite: telemetry line parsing (\textit{uart\_bridge.py})}
 \label{subsec:ut_telemetry}
 
-Function \texttt{\_parse\_telemetry} expects \texttt{F:<float> L:<float> R:<float> -> <label>}. Unit verification uses short Python snippets or the module’s standalone send/read smoke test with a loopback or live board.
+Function \textit{\_parse\_telemetry} expects \textit{F:<float> L:<float> R:<float> -> <label>}. Unit verification uses short Python snippets or the module’s standalone send/read smoke test with a loopback or live board.
 
 \begin{table}[H]
 \centering
-\caption{Representative unit test: telemetry parsing}
+\caption[Representative unit test: telemetry parsing]{\textbf{Representative unit test: telemetry parsing}}
 \label{tab:ut_telemetry}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|X|}
+\hline
 \textbf{Field} & \textbf{Description} \\
-\midrule
-Test ID & UT-02 \\
-Objective & Valid lines yield numeric \texttt{front}, \texttt{left}, \texttt{right} and string \texttt{action}; malformed lines yield \texttt{None}. \\
-Input & \texttt{F:45.2 L:30.1 R:80.5 -> FORWARD}; empty string; garbled text. \\
-Procedure & Call parser wrapper or \texttt{read\_telemetry} with injected lines. \\
-Expected & First line parses to three positive distances; bad inputs $\rightarrow$ \texttt{None}. \\
-Observed & Consistent with \texttt{\_parse\_telemetry} implementation. \textbf{Pass} under manual checks. \\
-\bottomrule
+\hline
+Test ID & UT-02 \\ \hline
+Objective & Valid lines yield numeric \textit{front}, \textit{left}, \textit{right} and string \textit{action}; malformed lines yield \textit{None}. \\ \hline
+Input & \textit{F:45.2 L:30.1 R:80.5 -> FORWARD}; empty string; garbled text. \\ \hline
+Procedure & Call parser wrapper or \textit{read\_telemetry} with injected lines. \\ \hline
+Expected & First line parses to three positive distances; bad inputs $\rightarrow$ \textit{None}. \\ \hline
+Observed & Consistent with \textit{\_parse\_telemetry} implementation. Pass under manual checks. \\
+\hline
 \end{tabularx}
 \end{table}
 
@@ -71,26 +74,26 @@ Observed & Consistent with \texttt{\_parse\_telemetry} implementation. \textbf{P
 \section{Integration Testing}
 \label{sec:integration_testing}
 
-Integration tests require the serial link and firmware running, but may keep the robot on blocks to avoid uncontrolled motion.
+Integration tests require the serial link and firmware running, but may keep the robot on blocks to avoid uncontrolled motion. \textbf{Tables~\ref{tab:it_json}} and~\textbf{\ref{tab:it_telem_up}} specify the integration test cases.
 
 \subsection[UART command round-trip]{UART JSON command round-trip (Pi $\rightarrow$ ESP32)}
 \label{subsec:it_uart_cmd}
 
 \begin{table}[H]
 \centering
-\caption{Integration test: inbound JSON handling}
+\caption[Integration test: inbound JSON handling]{\textbf{Integration test: inbound JSON handling}}
 \label{tab:it_json}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|X|}
+\hline
 \textbf{Field} & \textbf{Description} \\
-\midrule
-Test ID & IT-01 \\
-Objective & ESP32 parses a newline-terminated JSON line and updates mode/OLED without crashing. \\
-Input & Stop then forward JSON lines (one object per line) from the Pi or a serial terminal. \\
-Procedure & Connect UART; send one command at a time; observe serial debug and OLED \texttt{Action} field. \\
-Expected & Acknowledged motion or stop; no reset loop; speed within clamped range on scope or duty observation if used. \\
+\hline
+Test ID & IT-01 \\ \hline
+Objective & ESP32 parses a newline-terminated JSON line and updates mode/OLED without crashing. \\ \hline
+Input & Stop then forward JSON lines (one object per line) from the Pi or a serial terminal. \\ \hline
+Procedure & Connect UART; send one command at a time; observe serial debug and OLED \textit{Action} field. \\ \hline
+Expected & Acknowledged motion or stop; no reset loop; speed within clamped range on scope or duty observation if used. \\ \hline
 Observed & Record pass/fail per build; document port name and firmware version. \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -99,19 +102,24 @@ Observed & Record pass/fail per build; document port name and firmware version. 
 
 \begin{table}[H]
 \centering
-\caption{Integration test: telemetry reception on the Pi}
+\caption[Integration test: telemetry reception on the Pi]{\textbf{Integration test: telemetry reception on the Pi}}
 \label{tab:it_telem_up}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|X|}
+\hline
 \textbf{Field} & \textbf{Description} \\
-\midrule
+\hline
 Test ID & IT-02 \\
-Objective & \texttt{read\_telemetry()} returns fresh distances at the firmware’s print rate when the loop runs. \\
+\hline
+Objective & \textit{read\_telemetry()} returns fresh distances at the firmware’s print rate when the loop runs. \\
+\hline
 Input & Powered robot with sensors unobstructed and obstructed. \\
-Procedure & Run \texttt{python3 uart\_bridge.py} or full \texttt{main.py}; log lines. \\
-Expected & Non-\texttt{None} dicts when the line format matches; values change when obstacles move. \\
+\hline
+Procedure & Run \textit{python3 uart\_bridge.py} or full \textit{main.py}; log lines. \\
+\hline
+Expected & Non-\textit{None} dicts when the line format matches; values change when obstacles move. \\
+\hline
 Observed & Operator records sample log excerpt for the report appendix if required. \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -119,26 +127,31 @@ Observed & Operator records sample log excerpt for the report appendix if requir
 \section{System Testing}
 \label{sec:system_testing}
 
-System tests evaluate end-to-end behaviour: sensing, inference (when online), validation, and actuation.
+System tests evaluate end-to-end behaviour: sensing, inference (when online), validation, and actuation. \textbf{Tables~\ref{tab:st_auto}},~\textbf{\ref{tab:st_ai}}, and~\textbf{\ref{tab:st_safe}} document the system test procedures.
 
 \subsection[AUTO mode avoidance]{AUTO\_MODE obstacle avoidance}
 \label{subsec:st_auto}
 
 \begin{table}[H]
 \centering
-\caption{System test: standalone firmware behaviour}
+\caption[System test: standalone firmware behaviour]{\textbf{System test: standalone firmware behaviour}}
 \label{tab:st_auto}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|X|}
+\hline
 \textbf{Field} & \textbf{Description} \\
-\midrule
+\hline
 Test ID & ST-01 \\
-Objective & With Pi silent, robot executes rule-based avoidance using thresholds (e.g.\ \texttt{OBSTACLE\_DIST}, \texttt{WALL\_DIST}). \\
+\hline
+Objective & With Pi silent, robot executes rule-based avoidance using thresholds (e.g.\ \textit{OBSTACLE\_DIST}, \textit{WALL\_DIST}). \\
+\hline
 Input & Cluttered tabletop course; Pi not sending JSON. \\
+\hline
 Procedure & Power on; allow AUTO\_MODE; observe detours and stops. \\
+\hline
 Expected & No continuous forward into reported obstacle; recovery without watchdog fault. \\
+\hline
 Observed & Qualitative pass/fail; note any tuning changes to thresholds. \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -147,19 +160,24 @@ Observed & Qualitative pass/fail; note any tuning changes to thresholds. \\
 
 \begin{table}[H]
 \centering
-\caption{System test: intelligence layer and mode fallback}
+\caption[System test: intelligence layer and mode fallback]{\textbf{System test: intelligence layer and mode fallback}}
 \label{tab:st_ai}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|X|}
+\hline
 \textbf{Field} & \textbf{Description} \\
-\midrule
+\hline
 Test ID & ST-02 \\
-Objective & Valid JSON from Pi drives motion; silence beyond \texttt{AI\_TIMEOUT\_MS} restores AUTO\_MODE~\cite{brooks1986robust}. \\
-Input & Running \texttt{main.py} with valid API key; then stop Pi process or disconnect TX. \\
+\hline
+Objective & Valid JSON from Pi drives motion; silence beyond \textit{AI\_TIMEOUT\_MS} restores AUTO\_MODE~\cite{brooks1986robust}. \\
+\hline
+Input & Running \textit{main.py} with valid API key; then stop Pi process or disconnect TX. \\
+\hline
 Procedure & Observe OLED/mode indicators and behaviour before and after timeout. \\
+\hline
 Expected & Initial AI\_MODE motion consistent with validator output; after timeout, autonomous avoidance resumes. \\
+\hline
 Observed & Record timeout duration and qualitative result. \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -168,19 +186,24 @@ Observed & Record timeout duration and qualitative result. \\
 
 \begin{table}[H]
 \centering
-\caption{System test: degraded operation}
+\caption[System test: degraded operation]{\textbf{System test: degraded operation}}
 \label{tab:st_safe}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.1cm}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.1cm}|X|}
+\hline
 \textbf{Field} & \textbf{Description} \\
-\midrule
+\hline
 Test ID & ST-03 \\
-Objective & Orchestrator commands \texttt{stop} when telemetry is missing, JSON is unparseable, or Gemini raises~\cite{vemprala2024chatgpt}. \\
+\hline
+Objective & Orchestrator commands \textit{stop} when telemetry is missing, JSON is unparseable, or the LLM call raises~\cite{vemprala2024chatgpt}. \\
+\hline
 Input & Block sensors (optional), revoke key temporarily, or disconnect UART mid-run. \\
+\hline
 Procedure & Trigger each fault class once; capture logs. \\
+\hline
 Expected & No sustained forward motion under fault; log lines show stop or skip with warning. \\
+\hline
 Observed & Document per scenario. \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -188,27 +211,31 @@ Observed & Document per scenario. \\
 \section{Requirements Traceability}
 \label{sec:traceability}
 
-Table~\ref{tab:trace} maps selected functional requirements from Chapter~\ref{ch:srs} to the tests above. Full coverage of FR-01--FR-15 is completed during project examination by extending the same table format.
+\textbf{Table~\ref{tab:trace}} maps selected functional requirements from Chapter~\ref{ch:srs} to the tests above. Full coverage of FR-01--FR-15 is completed during project examination by extending the same table format.
 
 \begin{table}[H]
 \centering
-\caption{Partial requirements-to-test mapping}
+\caption[Partial requirements-to-test mapping]{\textbf{Partial requirements-to-test mapping}}
 \label{tab:trace}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.4cm}X>{\raggedright\arraybackslash}p{2.8cm}@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.4cm}|X|>{\raggedright\arraybackslash}p{2.8cm}|}
+\hline
 \textbf{Requirement} & \textbf{Intent} & \textbf{Tests} \\
-\midrule
+\hline
 FR-06, FR-07 & Validation and safe stop & UT-01 \\
+\hline
 FR-02, FR-03 & Telemetry and parsing & UT-02, IT-02 \\
+\hline
 FR-08, FR-09 & JSON command on UART & IT-01 \\
+\hline
 FR-12, FR-13 & Modes and fallback & ST-01, ST-02 \\
+\hline
 FR-15 & Fault logging and stop & ST-03 \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
 %-------------------------------------------------------------------
-\section{Summary}
-\label{sec:ch7summary}
+% \section{Summary}
+% \label{sec:ch7summary}
 
-This chapter defined a three-level test strategy for KANDA: unit checks on the validator and telemetry parser, integration checks on the UART link, and system checks for AUTO\_MODE, AI\_MODE, timeout fallback, and safe degradation. Tabulated procedures support repeatability during demonstration and viva. Limitations include dependence on manual observation for motion quality and on network availability for cloud-backed ST-02; future work may add scripted hardware-in-the-loop logging and timestamped test reports.
+% This chapter defined a three-level test strategy for KANDA: unit checks on the validator and telemetry parser, integration checks on the UART link, and system checks for AUTO\_MODE, AI\_MODE, timeout fallback, and safe degradation. Tabulated procedures support repeatability during demonstration and viva. Limitations include dependence on manual observation for motion quality and on network availability for cloud-backed ST-02; future work may add scripted hardware-in-the-loop logging and timestamped test reports.

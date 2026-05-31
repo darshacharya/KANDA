@@ -2,113 +2,47 @@
 %  Chapter 5 — Detailed Design (KANDA)
 %  Knowledge-driven Autonomous Navigation and Decision-making Agent
 % ================================================================
-\chapter{Detailed Design}
+\chapter{DETAILED DESIGN}
 \label{ch:detail}
 
-This chapter gets into the details of how KANDA actually works, piece by piece. We explain what each software module does, how they talk to each other, and what happens in a typical control cycle from sensor to motor. We also show what happens when things go wrong. This chapter is where the rubber meets the road---this is what we actually implemented and why each piece is necessary.
+This chapter gets into the details of how KANDA actually works, piece by piece. I explain what each software module does, how they talk to each other, and what happens in a typical control cycle from sensor to motor. I also show what happens when things go wrong. This chapter is where the rubber meets the road; this is what I actually implemented and why each piece is necessary.
+
 
 %-------------------------------------------------------------------
 \section{High-Level Design Overview}
 \label{sec:hld_overview}
 
-The deployment comprises a Raspberry Pi running the Python package tree \texttt{vision\_module/}, an ESP32 running Arduino-compatible firmware, a duplex UART link at 115,200 baud, and HTTPS access to two cloud services: Groq (text reasoning and ASR) and NVIDIA NIM (visual understanding). Figure~\ref{fig:hld_overview} summarises the principal deployable blocks.
+The deployment comprises a Raspberry Pi running the Python package tree \textit{vision\_module/}, an ESP32 running Arduino-compatible firmware, a duplex UART link at 115,200 baud, and HTTPS access to two cloud services: Groq (text reasoning and ASR) and NVIDIA NIM (visual understanding). \textbf{Figure~\ref{fig:hld_overview}} summarises the principal deployable blocks.
 
-%--- IMAGE PLACEHOLDER: Replace TikZ diagram with deployment_architecture.png if available
-% To use image instead of TikZ:
-% \begin{figure}[H]
-% \centering
-% \includegraphics[width=0.9\textwidth]{deployment_architecture.png}
-% \caption{High-level deployable blocks of KANDA}
-% \label{fig:hld_overview}
-% \end{figure}
-
-\begin{figure}[htbp!]
+\begin{figure}[H]
 \centering
-\resizebox{0.9\textwidth}{!}{%
-\begin{tikzpicture}[
-  block/.style={draw, thick, rounded corners=4pt, minimum width=3.6cm, minimum height=1.15cm, align=center, font=\small},
-  arr/.style={-{Stealth[length=2.5mm]}, thick},
-  darr/.style={-{Stealth[length=2.5mm]}, thick, densely dashed},
-  lbl/.style={font=\scriptsize, fill=white, inner sep=2pt},
-  node distance=1.1cm
-]
-
-\node[block, fill=blue!10] (op) {\textbf{Operator}\\{\footnotesize supervision}};
-
-\node[block, fill=cyan!10, right=1.8cm of op] (pi) {\textbf{Raspberry Pi}\\{\footnotesize \texttt{vision\_module/} (Python)}};
-
-\node[block, fill=orange!12, right=1.8cm of pi] (esp) {\textbf{ESP32}\\{\footnotesize firmware executor}};
-
-\node[block, fill=purple!10, below=1.45cm of pi] (gem) {\textbf{Groq + NVIDIA NIM}\\{\footnotesize Text \& Vision APIs}};
-
-\node[block, fill=gray!14, right=1.5cm of esp] (phys) {\textbf{Physical stack}\\{\footnotesize sensors, driver, motors, OLED}};
-
-\draw[arr] (op) -- node[lbl, above] {start/stop} (pi);
-\draw[arr] (pi) -- node[lbl, above] {UART JSON} (esp);
-\draw[arr] (esp) -- node[lbl, above] {mounting} (phys);
-\draw[arr] (pi.south) -- node[lbl, left] {reasoning} (gem.north);
-\draw[arr] (gem.north) -- node[lbl, right] {response} (pi.south);
-
-\end{tikzpicture}%
-}% end resizebox
-\caption{High-level deployable blocks of KANDA}
+\includegraphics[width=1.0\textwidth]{5_1.png}
+\caption[High-level deployable blocks of KANDA]{\textbf{High-level deployable blocks of KANDA.}}
 \label{fig:hld_overview}
 \end{figure}
 
-Fig.~\ref{fig:hld_overview} shows how the operator interacts with the intelligence layer on the Pi, how the Pi exchanges newline-terminated JSON and telemetry with the ESP32 over UART, how the ESP32 connects to the physical stack, and how the Pi dispatches to Groq (for text reasoning) and NVIDIA NIM (for visual understanding) over HTTPS.
+\textbf{Fig.~\ref{fig:hld_overview}} shows how the operator interacts with the intelligence layer on the Pi, how the Pi exchanges newline-terminated JSON and telemetry with the ESP32 over UART, how the ESP32 connects to the physical stack, and how the Pi dispatches to Groq (for text reasoning) and NVIDIA NIM (for visual understanding) over HTTPS.
 
 %-------------------------------------------------------------------
 \section{Low-Level Design Overview}
 \label{sec:lld_overview}
 
-The Python intelligence layer is organised into configuration, serial I/O, prompt construction, LLM access, validation, and a single orchestrator entry point. Figure~\ref{fig:lld_overview} maps files to these roles.
+The Python intelligence layer is organised into configuration, serial I/O, prompt construction, LLM access, validation, and a single orchestrator entry point. \textbf{Figure~\ref{fig:lld_overview}} maps files to these roles.
 
-\begin{figure}[htbp!]
+\begin{figure}[H]
 \centering
-\resizebox{0.94\textwidth}{!}{%
-\begin{tikzpicture}[
-  mod/.style={draw, thick, rounded corners=3pt, minimum width=3.5cm, minimum height=0.85cm, align=center, font=\footnotesize},
-  grp/.style={draw, thick, rounded corners=6pt, minimum width=8cm, minimum height=2.4cm},
-  arr/.style={-{Stealth[length=2mm]}, thick},
-  lbl/.style={font=\tiny, fill=white, inner sep=1pt},
-  node distance=0.45cm
-]
-
-\node[mod, fill=blue!12] (main) {\textbf{main.py}\\{\scriptsize \texttt{run\_cycle()}, event loop}};
-\node[mod, fill=green!10, below left=0.55cm and 0.2cm of main] (uart) {\textbf{uart\_bridge.py}\\{\scriptsize \texttt{UARTBridge}}};
-\node[mod, fill=green!10, below=0.55cm of main] (ctx) {\textbf{context\_builder.py}\\{\scriptsize \texttt{build\_prompt()}}};
-\node[mod, fill=green!10, below right=0.55cm and 0.2cm of main] (llm) {\textbf{llm\_client.py}\\{\scriptsize \texttt{query()}}};
-
-\node[mod, fill=red!8, below=1.35cm of ctx] (val) {\textbf{safety\_validator.py}\\{\scriptsize \texttt{validate()}}};
-\node[mod, fill=gray!14, left=0.35cm of val] (cfg) {\textbf{config.py}\\{\scriptsize constants, env}};
-
-\draw[arr] (main) -- (uart);
-\draw[arr] (main) -- (ctx);
-\draw[arr] (main) -- (llm);
-\draw[arr] (main) -- (val);
-\draw[arr] (llm.south) -- ++(0,-0.12) -| (cfg.north);
-\draw[arr] (val.west) -- (cfg.east);
-\draw[arr] (uart.south) -- ++(0,-0.12) -| (cfg.north);
-
-\begin{scope}[on background layer]
-  \node[grp, fill=blue!3, draw=blue!35, fit=(main), inner sep=10pt, label={[font=\scriptsize\itshape, text=blue!55]above:Orchestration}] {};
-  \node[grp, fill=green!4, draw=green!40, fit=(uart)(ctx)(llm), inner sep=10pt, label={[font=\scriptsize\itshape, text=green!55]above:I/O and reasoning}] {};
-  \node[grp, fill=gray!4, draw=gray!45, fit=(val)(cfg), inner sep=10pt, label={[font=\scriptsize\itshape, text=gray!55]below:Safety and configuration}] {};
-\end{scope}
-
-\end{tikzpicture}%
-}% end resizebox
-\caption{Low-level design: Python modules under \texttt{ai\_layer/}}
+\includegraphics[width=1.0\textwidth]{5_2.png}
+\caption[Low-level design: Python modules under ai\_layer/]{\textbf{Low-level design: Python modules under \textit{ai\_layer/}.}}
 \label{fig:lld_overview}
 \end{figure}
 
-Fig.~\ref{fig:lld_overview} reflects the call pattern described in Section~\ref{sec:modules}: \texttt{main.py} invokes UART bridge, prompt builder, LLM client, and validator; \texttt{config.py} supplies shared limits and environment-backed settings to clients that depend on model id, serial port, and action sets.
+\textbf{Fig.~\ref{fig:lld_overview}} reflects the call pattern described in Section~\ref{sec:modules}: \textit{main.py} invokes UART bridge, prompt builder, LLM client, and validator; \textit{config.py} supplies shared limits and environment-backed settings to clients that depend on model id, serial port, and action sets.
 
 %-------------------------------------------------------------------
 \section{Use Case Diagram}
 \label{sec:usecase}
 
-Figure~\ref{fig:usecase} relates actors to the operational use cases of the deployed robot and cloud service.
+\textbf{Figure~\ref{fig:usecase}} relates actors to the operational use cases of the deployed robot and cloud service.
 
 \begin{figure}[htbp!]
 \centering
@@ -168,7 +102,7 @@ Figure~\ref{fig:usecase} relates actors to the operational use cases of the depl
 
 \end{tikzpicture}%
 }% end resizebox
-\caption{Use case diagram for KANDA deployment}
+\caption[Use case diagram for KANDA deployment]{\textbf{Use case diagram for KANDA deployment.}}
 \label{fig:usecase}
 \end{figure}
 
@@ -178,214 +112,134 @@ The \textit{operator} powers the platform, starts or stops the Pi process, reads
 \section{Component Diagram}
 \label{sec:component}
 
-Figure~\ref{fig:component} packages software onto the two compute nodes and shows external services.
+\textbf{Figure~\ref{fig:component}} packages software onto the two compute nodes and shows external services.
 
-\begin{figure}[htbp!]
+\begin{figure}[H]
 \centering
-\resizebox{0.9\textwidth}{!}{%
-\begin{tikzpicture}[
-  comp/.style={draw, thick, rounded corners=3pt, minimum width=3.8cm, minimum height=1.05cm, align=center, font=\small, fill=white},
-  pkg/.style={draw, thick, rounded corners=8pt, minimum width=8.2cm, minimum height=3.4cm},
-  arr/.style={-{Stealth[length=2.5mm]}, thick},
-  lbl/.style={font=\scriptsize, fill=white, inner sep=1pt},
-  node distance=0.75cm
-]
-
-\node[comp, fill=cyan!10] (pi) {\textbf{Raspberry Pi 4}\\{\scriptsize Linux + Python 3}};
-
-\node[comp, fill=orange!12, right=2.2cm of pi] (esp) {\textbf{ESP32 DevKit}\\{\scriptsize Arduino core firmware}};
-
-\node[comp, fill=purple!10, below=1.5cm of pi] (net) {\textbf{Network path}\\{\scriptsize outbound HTTPS}};
-
-\node[comp, fill=purple!14, right=0.2cm of net] (gem) {\textbf{Groq + NVIDIA NIM}\\{\scriptsize reasoning \& vision APIs}};
-
-\node[comp, fill=gray!12, below=1.4cm of esp] (bat) {\textbf{Power / mechanics}\\{\scriptsize battery, driver, motors}};
-
-\draw[arr] (pi) -- node[lbl, above] {UART 115200} (esp);
-\draw[arr] (pi) -- node[lbl, left] {TLS} (net);
-\draw[arr] (net) -- (gem);
-\draw[arr] (esp) -- node[lbl, right] {GPIO} (bat);
-
-\begin{scope}[on background layer]
-  \node[pkg, fill=cyan!3, draw=cyan!40, fit=(pi), inner sep=14pt, label={[font=\scriptsize\bfseries, text=cyan!60]above left:Companion computer}] {};
-  \node[pkg, fill=orange!3, draw=orange!40, fit=(esp)(bat), inner sep=14pt, label={[font=\scriptsize\bfseries, text=orange!60]above right:Embodiment node}] {};
-\end{scope}
-
-\end{tikzpicture}%
-}% end resizebox
-\caption{Component diagram: companion computer, embodiment node, and cloud API}
+\includegraphics[width=0.7\textwidth]{5_4.png}
+\caption[Component diagram: companion computer, embodiment node, and cloud]{\textbf{Component diagram: companion computer, embodiment node, and cloud.}}
 \label{fig:component}
 \end{figure}
 
-The Raspberry Pi component hosts the entire \texttt{vision\_module/} tree. The ESP32 component hosts sensing, actuation, OLED rendering, and UART framing. Groq and NVIDIA NIM are external cloud services accessed from the Pi.
+The Raspberry Pi component hosts the entire \textit{vision\_module/} tree. The ESP32 component hosts sensing, actuation, OLED rendering, and UART framing. Groq and NVIDIA NIM are external cloud services accessed from the Pi.
 
 %-------------------------------------------------------------------
 \section{Structure Chart}
 \label{sec:structure_chart}
 
-Figure~\ref{fig:structure_chart} shows the static decomposition of the orchestrator and its collaborators.
+\textbf{Figure~\ref{fig:structure_chart}} shows the static decomposition of the orchestrator and its collaborators.
 
-\begin{figure}[htbp!]
+\begin{figure}[H]
 \centering
-\resizebox{0.95\textwidth}{!}{%
-\begin{tikzpicture}[
-  mod/.style={draw, thick, rounded corners=3pt, minimum width=2.85cm, minimum height=0.88cm, align=center, font=\footnotesize},
-  top/.style={mod, fill=blue!14, minimum width=5.5cm, minimum height=1.05cm, font=\small\bfseries},
-  arr/.style={-{Stealth[length=2mm]}, thick},
-  lbl/.style={font=\tiny, fill=white, inner sep=1pt},
-  node distance=0.55cm
-]
-
-\node[top] (main) {main.py\\\scriptsize process entry, signal handlers};
-
-\node[mod, fill=green!10, below left=0.95cm and 0.15cm of main] (uart) {uart\_bridge.py\\\scriptsize serial I/O};
-\node[mod, fill=green!10, below=0.95cm of main] (ctx) {context\_builder.py\\\scriptsize prompts};
-\node[mod, fill=green!10, below right=0.95cm and 0.15cm of main] (llm) {task\_agent.py\\\scriptsize reasoning + vision};
-
-\node[mod, fill=red!9, below=1.05cm of ctx] (val) {safety\_validator.py\\\scriptsize validate()};
-
-\node[mod, fill=gray!13, left=0.4cm of val] (cfg) {config.py\\\scriptsize env + limits};
-
-\draw[arr] (main) -- (uart);
-\draw[arr] (main) -- (ctx);
-\draw[arr] (main) -- (llm);
-\draw[arr] (main) -- (val);
-\draw[arr] (llm.south) -- ++(0,-0.15) -| (cfg.north);
-\draw[arr] (val.west) -- (cfg.east);
-\draw[arr] (uart.south) -- ++(0,-0.15) -| (cfg.north);
-
-\end{tikzpicture}%
-}% end resizebox
-\caption{Structure chart: intelligence layer modules}
+\includegraphics[width=1.0\textwidth]{5_5.png}
+\caption[Structure chart: intelligence layer modules]{\textbf{Structure chart: intelligence layer modules.}}
 \label{fig:structure_chart}
 \end{figure}
 
-Entry resolves in \texttt{main.py}: an infinite loop calls \texttt{run\_cycle()}, which sequences UART reads, prompt construction, Gemini inference, validation, and command transmission. Shared constants and limits live in \texttt{config.py}.
+Entry resolves in \textit{main.py}: an infinite loop calls \textit{run\_cycle()}, which sequences UART reads, prompt construction, LLM inference, validation, and command transmission. Shared constants and limits live in \textit{config.py}.
 
 %-------------------------------------------------------------------
 \section{Control Cycle Activity View}
 \label{sec:activity}
 
-Figure~\ref{fig:activity_cycle} refines the Level~2 intelligence pipeline from Chapter~\ref{ch:hld} into the conditional branches implemented in code.
+\textbf{Figure~\ref{fig:activity_cycle}} refines the Level~2 intelligence pipeline from Chapter~\ref{ch:hld} into the conditional branches implemented in code.
 
-\begin{figure}[htbp!]
+\begin{figure}[H]
 \centering
-\resizebox{0.72\textwidth}{!}{%
-\begin{tikzpicture}[
-  flowstep/.style={draw, thick, rounded corners=3pt, minimum width=6.8cm, minimum height=0.62cm, align=center, font=\footnotesize, fill=blue!6},
-  dec/.style={draw, thick, diamond, aspect=2, minimum width=3.2cm, inner sep=2pt, align=center, font=\footnotesize, fill=yellow!15},
-  arr/.style={-{Stealth[length=2mm]}, thick},
-  lbl/.style={font=\tiny, fill=white, inner sep=1pt},
-  node distance=0.42cm
-]
-
-\node[flowstep] (a) {Read one telemetry line via \texttt{UARTBridge.read\_telemetry()}};
-\node[dec, below=0.5cm of a] (b) {Parsed?};
-\node[flowstep, below left=0.6cm and 0.1cm of b] (c) {Send safe stop (\texttt{stop}, 0)};
-\node[flowstep, below right=0.6cm and 0.1cm of b] (d) {\texttt{build\_prompt(telemetry)}};
-\node[flowstep, below=0.45cm of d] (e) {\texttt{llm\_client.query(prompt)}};
-\node[flowstep, below=0.45cm of e] (f) {\texttt{safety\_validator.validate(raw)}};
-\node[flowstep, below=0.45cm of f] (g) {\texttt{send\_command(action, speed)}};
-\node[flowstep, below=0.45cm of g] (h) {Sleep \texttt{LOOP\_INTERVAL\_SEC}; repeat};
-
-\draw[arr] (a) -- (b);
-\draw[arr] (b) -- node[lbl, above left] {no} (c);
-\draw[arr] (b) -- node[lbl, above right] {yes} (d);
-\draw[arr] (d) -- (e);
-\draw[arr] (e) -- (f);
-\draw[arr] (f) -- (g);
-\draw[arr] (g) -- (h);
-\draw[arr] (c.south) |- ++(0,-1.8) -| (h.south);
-
-\end{tikzpicture}%
-}% end resizebox
-\caption{Activity view of one intelligence-layer control cycle (\texttt{run\_cycle})}
+\includegraphics[width=0.7\textwidth]{5_6.png}
+\caption[Activity view of one control cycle]{\textbf{Activity view of one control cycle.}}
 \label{fig:activity_cycle}
 \end{figure}
 
-Timeouts and API exceptions on the Gemini step route to the same safe-stop policy as missing telemetry before the next interval begins.
+Timeouts and API exceptions on the LLM step route to the same safe-stop policy as missing telemetry before the next interval begins.
 
 %-------------------------------------------------------------------
 \section{Module Description}
 \label{sec:modules}
 
-Table~\ref{tab:modules} lists Python modules under \texttt{ai\_layer/}. The embodiment artefact is the firmware sketch \texttt{phase2\_obstacle\_avoidance.ino} described in Section~\ref{subsec:firmware}.
+\textbf{Table~\ref{tab:modules}} lists Python modules under \textit{ai\_layer/}. The embodiment artefact is the firmware sketch \textit{phase2\_obstacle\_avoidance.ino} described in Section~\ref{subsec:firmware}.
 
 \begin{table}[htbp!]
 \centering
-\caption{Intelligence-layer modules and responsibilities}
+\caption[Intelligence-layer modules and responsibilities]{\textbf{Intelligence-layer modules and responsibilities}}
 \label{tab:modules}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{3.4cm}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.6cm}|>{\raggedright\arraybackslash}p{3.4cm}|X|}
+\hline
 \textbf{Module} & \textbf{File} & \textbf{Primary responsibility} \\
-\midrule
-Orchestrator & \texttt{main.py} & Control loop, signals, shutdown stop, invokes cycle steps \\
-Configuration & \texttt{config.py} & Serial port, baud, model id, timing, \texttt{VALID\_ACTIONS}, speed bounds \\
-UART bridge & \texttt{uart\_bridge.py} & Open serial, parse telemetry lines, send JSON commands \\
-Context builder & \texttt{context\_builder.py} & Static hardware description + live sensor section + Phase~4 stubs \\
-LLM client & \texttt{llm\_client.py} & Configure Gemini, generate content, extract JSON from response text \\
-Safety validator & \texttt{safety\_validator.py} & Type and membership checks; clamp speed; fallback stop dict \\
-\bottomrule
+\hline
+Orchestrator & \textit{main.py} & Control loop, signals, shutdown stop, invokes cycle steps \\
+\hline
+Configuration & \textit{config.py} & Serial port, baud, model id, timing, \textit{VALID\_ACTIONS}, speed bounds \\
+\hline
+UART bridge & \textit{uart\_bridge.py} & Open serial, parse telemetry lines, send JSON commands \\
+\hline
+Context builder & \textit{context\_builder.py} & Static hardware description + live sensor section + Phase~4 stubs \\
+\hline
+LLM client & \textit{llm\_client.py} & Configure Groq/NVIDIA NIM, generate content, extract JSON from response text \\
+\hline
+Safety validator & \textit{safety\_validator.py} & Type and membership checks; clamp speed; fallback stop dict \\
+\hline
 \end{tabularx}
 \end{table}
 
 %-------------------------------------------------------------------
-\subsection[Configuration module]{Configuration module (\texttt{config.py})}
+\subsection[Configuration module]{Configuration module (\textit{config.py})}
 \label{subsec:config}
 
-\textbf{Responsibility:} Centralise tunable parameters and environment-backed secrets so other modules avoid scattering literals.
+Responsibility: Centralise tunable parameters and environment-backed secrets so other modules avoid scattering literals.
 
-\textbf{Key items:} \texttt{SERIAL\_PORT} (default \texttt{/dev/ttyS0}), \texttt{BAUD\_RATE} (115200), \texttt{GEMINI\_MODEL} (default \texttt{gemini-2.5-flash}), \texttt{GEMINI\_API\_KEY} from environment, \texttt{VALID\_ACTIONS} as a Python set of seven string verbs, \texttt{SPEED\_MIN}/\texttt{SPEED\_MAX} (0--255), \texttt{LOOP\_INTERVAL\_SEC}, \texttt{LLM\_TIMEOUT\_SEC}, and \texttt{DEFAULT\_SPEED} when the model omits speed.
+Key items: \textit{SERIAL\_PORT} (default \textit{/dev/ttyS0}), \textit{BAUD\_RATE} (115200), \textit{GROQ\_API\_KEY} and \textit{NVIDIA\_API\_KEY} from environment, \textit{VALID\_ACTIONS} as a Python set of seven string verbs, \textit{SPEED\_MIN}/\textit{SPEED\_MAX} (0--255), \textit{LOOP\_INTERVAL\_SEC}, \textit{LLM\_TIMEOUT\_SEC}, and \textit{DEFAULT\_SPEED} when the model omits speed.
 
 %-------------------------------------------------------------------
-\subsection[UART bridge module]{UART bridge module (\texttt{uart\_bridge.py})}
+\subsection[UART bridge module]{UART bridge module (\textit{uart\_bridge.py})}
 \label{subsec:uart}
 
-\textbf{Responsibility:} Encapsulate pyserial lifecycle and the ASCII protocols agreed with firmware.
+Responsibility: Encapsulate pyserial lifecycle and the ASCII protocols agreed with firmware.
 
-\textbf{Interface:} Class \texttt{UARTBridge} exposes \texttt{connect()}, \texttt{disconnect()}, context-manager support, \texttt{send\_command(action, speed)} (serialises a one-line JSON object with \texttt{action} and \texttt{speed} keys), and \texttt{read\_telemetry()} which blocks up to \texttt{SERIAL\_TIMEOUT}, decodes UTF-8, and parses lines of the form \texttt{F:<cm> L:<cm> R:<cm> -> <ACTION>} into a dictionary with floating-point ranges and a string action tag.
+Interface: Class \textit{UARTBridge} exposes \textit{connect()}, \textit{disconnect()}, context-manager support, and \textit{read\_telemetry()}. The send method serialises a one-line JSON object. The read method blocks up to \textit{SERIAL\_TIMEOUT}, decodes UTF-8, and parses telemetry lines into a dictionary.
 
-\textbf{Notes:} A short sleep after opening the port accommodates ESP32 reset behaviour.
+
+Notes: A short sleep after opening the port accommodates ESP32 reset behaviour.
 
 %-------------------------------------------------------------------
-\subsection[Context builder module]{Context builder module (\texttt{context\_builder.py})}
+\subsection[Context builder module]{Context builder module (\textit{context\_builder.py})}
 \label{subsec:ctx}
 
-\textbf{Responsibility:} Concatenate a static hardware-and-policy preamble with formatted front/left/right readings so Gemini receives explicit affordances and safety hints on every call~\cite{ahn2022saycan}.
+Responsibility: Concatenate a static hardware-and-policy preamble with formatted front/left/right readings so the LLM receives explicit affordances and safety hints on every call~\cite{ahn2022saycan}.
 
-\textbf{Interface:} \texttt{build\_prompt(telemetry, user\_speech=None, image\_b64=None)} returns one prompt string. Optional speech and image parameters are reserved for Phase~4 multimodal extensions; the LLM client already accepts \texttt{image\_b64} for future attachment.
+Interface: \textit{build\_prompt(telemetry, user\_speech=None, image\_b64=None)} returns one prompt string. Optional speech and image parameters are reserved for Phase~4 multimodal extensions; the LLM client already accepts \textit{image\_b64} for future attachment.
 
 %-------------------------------------------------------------------
-\subsection[LLM client module]{LLM client module (\texttt{llm\_client.py})}
+\subsection[LLM client module]{LLM client module (\textit{llm\_client.py})}
 \label{subsec:llm}
 
-\textbf{Responsibility:} Initialise the Google Generative AI client once per process, invoke \texttt{GenerativeModel.generate\_content} with low temperature (0.2) and short \texttt{max\_output\_tokens} (64), and recover a JSON object from arbitrary response text.
+Responsibility: Initialise the Groq and NVIDIA NIM clients (OpenAI-compatible API) once per process, invoke inference with low temperature (0.1) and short \textit{max\_tokens} (256), and recover a JSON object from arbitrary response text.
 
-\textbf{Parsing strategy:} Prefer fenced markdown JSON if present; otherwise extract the first balanced brace segment and pass it to \texttt{json.loads}. Failures surface as \texttt{ValueError} for the orchestrator to translate into safe stop.
+Parsing strategy: Prefer fenced markdown JSON if present; otherwise extract the first balanced brace segment and pass it to \textit{json.loads}. Failures surface as \textit{ValueError} for the orchestrator to translate into safe stop.
 
 %-------------------------------------------------------------------
-\subsection[Safety validator module]{Safety validator module (\texttt{safety\_validator.py})}
+\subsection[Safety validator module]{Safety validator module (\textit{safety\_validator.py})}
 \label{subsec:val}
 
-\textbf{Responsibility:} Guarantee that only whitelisted actions and bounded speeds reach \texttt{send\_command}; never raise---always return a usable dictionary~\cite{huang2023grounded}.
+Responsibility: Guarantee that only whitelisted actions and bounded speeds reach \textit{send\_command}; never raise, always return a usable dictionary~\cite{huang2023grounded}.
 
-\textbf{Rules:} Reject non-dicts and unknown actions with fallback \texttt{action}\,=\,\texttt{stop} and \texttt{speed}\,=\,0; coerce \texttt{speed} with \texttt{int()}; clamp to $[0,255]$ with logging when out of range.
+Rules: Reject non-dicts and unknown actions with fallback \textit{action}\,=\,\textit{stop} and \textit{speed}\,=\,0; coerce \textit{speed} with \textit{int()}; clamp to $[0,255]$ with logging when out of range.
 
 %-------------------------------------------------------------------
-\subsection[Orchestrator]{Orchestrator (\texttt{main.py})}
+\subsection[Orchestrator]{Orchestrator (\textit{main.py})}
 \label{subsec:main}
 
-\textbf{Responsibility:} Own the process lifecycle: configure logging, register SIGINT/SIGTERM handlers that send stop, open UART, loop with \texttt{time.sleep(LOOP\_INTERVAL\_SEC)}, catch unexpected exceptions per cycle and issue stop, and disconnect cleanly.
+Responsibility: Own the process lifecycle: configure logging, register SIGINT/SIGTERM handlers that send stop, open UART, loop with \textit{time.sleep(LOOP\_INTERVAL\_SEC)}, catch unexpected exceptions per cycle and issue stop, and disconnect cleanly.
 
-\textbf{Cycle ordering:} Matches Fig.~\ref{fig:activity_cycle}: read telemetry; if missing, stop and skip LLM; else build prompt, query Gemini (errors treated like invalid output), validate, transmit.
+Cycle ordering: Matches \textbf{Fig.~\ref{fig:activity_cycle}}: read telemetry; if missing, stop and skip LLM; else build prompt, query Groq or NVIDIA NIM (errors treated like invalid output), validate, transmit.
 
 %-------------------------------------------------------------------
-\subsection[Embodiment firmware]{Embodiment firmware (\texttt{phase2\_obstacle\_avoidance.ino})}
+\subsection[Embodiment firmware]{Embodiment firmware (\textit{phase2\_obstacle\_avoidance.ino})}
 \label{subsec:firmware}
 
-\textbf{Responsibility:} Run the real-time sense--act loop on the ESP32: trigger/echo ultrasonic measurements with \texttt{pulseIn}, map distances through motor primitives (\texttt{forward}, pivots, etc.) via TB6612FNG direction pins and LEDC PWM, refresh the SSD1306 via I\textsuperscript{2}C, and exchange newline-terminated messages over \texttt{Serial}.
+Responsibility: Run the real-time sense--act loop on the ESP32: trigger/echo ultrasonic measurements with \textit{pulseIn}, map distances through motor primitives (\textit{forward}, pivots, etc.) via TB6612FNG direction pins and LEDC PWM, refresh the SSD1306 via I\textsuperscript{2}C, and exchange newline-terminated messages over \textit{Serial}.
 
-\textbf{Modes:} \texttt{AI\_MODE} activates when a valid JSON line arrives (\texttt{ArduinoJson} parse); \texttt{AUTO\_MODE} executes distance-threshold rules when no JSON is seen for \texttt{AI\_TIMEOUT\_MS} (5000\,ms). Constants such as \texttt{OBSTACLE\_DIST} and \texttt{WALL\_DIST} tune avoidance aggressiveness independently of the LLM policy on the Pi~\cite{brooks1986robust}.
+Modes: \textit{AI\_MODE} activates when a valid JSON line arrives (\textit{ArduinoJson} parse); \textit{AUTO\_MODE} executes distance-threshold rules when no JSON is seen for \textit{AI\_TIMEOUT\_MS} (5000\,ms). Constants such as \textit{OBSTACLE\_DIST} and \textit{WALL\_DIST} tune avoidance aggressiveness independently of the LLM policy on the Pi~\cite{brooks1986robust}.
 
 %-------------------------------------------------------------------
 \section{Phase~4 Multimodal Architecture}
@@ -397,82 +251,35 @@ Phase~4 extends the intelligence layer with voice, vision, and remote interactio
 \subsection{7-State Machine}
 \label{subsec:statemachine}
 
-Figure~\ref{fig:state_machine_ch5} shows the state-transition graph for the Phase~4 orchestrator.
+\textbf{Figure~\ref{fig:state_machine_ch5}} shows the state-transition graph for the Phase~4 orchestrator. The machine begins in IDLE and transitions through LISTENING, THINKING, ACTING, SEARCHING, SPEAKING, and REPORTING states. A global cancel path (triggered by obstacle detection or an explicit stop command) can abort any active state and return the system to IDLE, ensuring that safety is never blocked by an ongoing task.
+
 
 \begin{figure}[H]
 \centering
-\resizebox{0.95\textwidth}{!}{%
-\begin{tikzpicture}[
-  state/.style={draw, thick, rounded corners=6pt, minimum width=2.2cm,
-                minimum height=1cm, align=center, font=\small\bfseries},
-  trans/.style={-{Stealth[length=2.5mm]}, thick, font=\scriptsize},
-  node distance=1.2cm and 1.6cm
-]
-\node[state, fill=gray!15]    (idle)    {IDLE};
-\node[state, fill=green!15, right=of idle]  (listen) {LISTENING};
-\node[state, fill=yellow!15, right=of listen] (think)  {THINKING};
-\node[state, fill=orange!15, below=of idle]  (act)    {ACTING};
-\node[state, fill=red!10, below=of listen]  (search) {SEARCHING};
-\node[state, fill=blue!12, below=of think]  (speak)  {SPEAKING};
-\node[state, fill=purple!10, below right=1.2cm and 0.4cm of search] (report) {REPORTING};
-
-\draw[trans] (idle)   -- node[above]{wake word / Telegram} (listen);
-\draw[trans] (listen) -- node[above]{VAD end} (think);
-\draw[trans] (think)  -- node[left,pos=0.3]{COMMAND} (act);
-\draw[trans] (think.south) -- node[right,pos=0.3]{TASK / find} (search.north);
-\draw[trans] (think) -- node[above right,pos=0.6]{QUESTION} (speak);
-\draw[trans] (act)    -- node[left]{done} (idle);
-\draw[trans] (search) -- node[below]{found / max steps} (report);
-\draw[trans] (speak)  -- node[right]{TTS done} (report);
-\draw[trans] (report) -- node[below left]{reset} (idle);
-\draw[trans, dashed, red!60!black] (search.west) -- node[above left,font=\scriptsize\itshape]{cancel} (idle.south);
-\draw[trans, dashed, red!60!black] (act.west) to[out=180,in=210] node[left,font=\scriptsize\itshape]{obstacle} (idle.west);
-\end{tikzpicture}}
-\caption{7-state event-driven machine for the Phase~4 multimodal agent. Dashed red transitions represent global cancel (obstacle detection or user stop command).}
+\includegraphics[width=1.0\textwidth]{5_7.png}
+\caption[7-state event-driven machine for the Phase 4 multimodal agent]{\textbf{7-state event-driven machine for the Phase~4 multimodal agent.}}
 \label{fig:state_machine_ch5}
 \end{figure}
 
-Four concurrent daemon threads support the state machine: (1)~openWakeWord detector running offline ONNX inference at 8\% CPU, (2)~ESP32 heartbeat monitor parsing telemetry and propagating obstacle events, (3)~Telegram bot long-polling, and (4)~TTS worker queue draining speech requests.
+Four concurrent daemon threads support the state machine: (1)~openWakeWord~\cite{openwakeword2024} detector running offline ONNX inference at 8\% CPU, (2)~ESP32 heartbeat monitor parsing telemetry and propagating obstacle events, (3)~Telegram bot long-polling, and (4)~TTS worker queue draining speech requests.
 
 %-------------------------------------------------------------------
 \subsection{ReAct Search Algorithm}
 \label{subsec:react_search}
 
-For ``find'' tasks, a specialised ReAct loop (Fig.~\ref{fig:react_flow}) combines vision, movement, and semantic memory.
+For ``find'' tasks, a specialised ReAct loop~\cite{yao2023react} (\textbf{Fig.~\ref{fig:react_flow}}) combines vision, movement, and semantic memory. Scene descriptions are compared using Ratcliff--Obershelp string similarity~\cite{ratcliff1988} to prevent revisiting previously explored locations.
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[
-  block/.style={draw, thick, rounded corners=3pt, minimum height=0.8cm,
-                minimum width=2.8cm, align=center, font=\footnotesize},
-  decision/.style={draw, thick, diamond, aspect=2, inner sep=1pt,
-                   align=center, font=\footnotesize},
-  arr/.style={-{Stealth[length=2mm]}, thick},
-  node distance=0.55cm
-]
-\node[block, fill=blue!8] (cap) {Capture frame};
-\node[block, fill=blue!8, below=of cap] (desc) {VLM: describe scene};
-\node[decision, below=of desc] (mem) {In memory?\\(sim $>$ 0.7)};
-\node[decision, below left=0.8cm and 0.2cm of mem] (goal) {Target\\found?};
-\node[block, fill=green!10, below=0.6cm of goal] (found) {RETURN found};
-\node[block, fill=orange!10, below right=0.8cm and 0.2cm of mem] (move) {Best move\\from sensors};
-\node[block, fill=orange!10, below=of move] (exec) {Execute + store};
-
-\draw[arr] (cap) -- (desc);
-\draw[arr] (desc) -- (mem);
-\draw[arr] (mem) -- node[left,font=\tiny]{no} (goal);
-\draw[arr] (mem) -- node[above,font=\tiny]{yes (skip)} (move);
-\draw[arr] (goal) -- node[left,font=\tiny]{yes} (found);
-\draw[arr] (goal.east) -- node[above,font=\tiny]{no} (move.west);
-\draw[arr] (move) -- (exec);
-\draw[arr] (exec.east) -- ++(0.8,0) |- node[right,font=\tiny,pos=0.25]{next step} (cap.east);
-\end{tikzpicture}
-\caption{ReAct search flowchart: capture $\to$ describe $\to$ memory check $\to$ goal check $\to$ move $\to$ loop. Semantic memory (similarity threshold 0.7, auto-lowered to 0.5 after 5 skips) prevents revisiting.}
+\includegraphics[width=0.9\textwidth]{5_8.png}
+\caption[ReAct search flowchart with semantic memory]{\textbf{ReAct search flowchart with semantic memory.}}
 \label{fig:react_flow}
 \end{figure}
 
 %-------------------------------------------------------------------
-\section{Summary}
-\label{sec:ch5summary}
+% \section{Summary}
+% \label{sec:ch5summary}
 
-This chapter detailed KANDA's software structure. Figures~\ref{fig:hld_overview}--\ref{fig:component} positioned the Pi intelligence layer, ESP32 embodiment node, UART link, and Gemini service; Figures~\ref{fig:structure_chart} and~\ref{fig:activity_cycle} traced module ownership and one control cycle. Table~\ref{tab:modules} and Sections~\ref{subsec:config}--\ref{subsec:firmware} documented configuration, serial bridging, prompting, Gemini access, validation, orchestration, and firmware responsibilities consistent with Chapters~\ref{ch:srs} and~\ref{ch:hld}. Implementation detail appears in Chapter~\ref{ch:impl}; formal test procedures and requirement traceability appear in Chapter~\ref{ch:testing}.
+% This chapter detailed KANDA's software structure from high-level deployment topology down to individual module interfaces. \textbf{Figures~\ref{fig:hld_overview}}--\ref{fig:component} positioned the Pi intelligence layer, ESP32 embodiment node, UART link, and cloud LLM services within the overall system boundary. \textbf{Figures~\ref{fig:structure_chart}} and~\ref{fig:activity_cycle} traced module ownership and the sequencing of one control cycle from telemetry ingestion through validation to motor command transmission.
+
+

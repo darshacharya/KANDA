@@ -5,22 +5,18 @@ All intent classification and planning is now in task_agent.py.
 
 Flow:
   1. Record audio with VAD (stops when user stops speaking)
-  2. Send WAV to Gemini for transcription
+  2. Send WAV to Groq Whisper for transcription
   3. Return plain text transcript
 
 Test standalone:
-    export GEMINI_API_KEY=your_key
+    export GROQ_API_KEY=your_key
     python3 voice_command.py
 """
 
+import json
 import logging
-import re
-import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+import urllib.request
 from typing import Optional
-
-from google import genai
-from google.genai import types
 
 import config
 from mic import Microphone
@@ -28,19 +24,15 @@ from mic import Microphone
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-_TRANSCRIBE_PROMPT = """Transcribe exactly what the person said in this audio recording.
-Return only the transcription as plain text. If there is no speech or only silence, reply with exactly: SILENCE"""
-
 
 class VoiceTranscriber:
-    """Records from earphone mic and transcribes using Gemini."""
+    """Records from earphone mic and transcribes using Groq Whisper."""
 
     def __init__(self):
-        if not config.GEMINI_API_KEY:
-            raise ValueError("GEMINI_API_KEY not set")
-        self._client = genai.Client(api_key=config.GEMINI_API_KEY)
-        self._mic    = Microphone()
-        logger.info("VoiceTranscriber initialized")
+        if not config.GROQ_API_KEY:
+            raise ValueError("GROQ_API_KEY not set — required for voice transcription")
+        self._mic = Microphone()
+        logger.info("VoiceTranscriber initialized (Groq Whisper)")
 
     def start(self) -> None:
         self._mic.start()
@@ -63,37 +55,55 @@ class VoiceTranscriber:
         return self._transcribe(wav_bytes)
 
     def _transcribe(self, wav_bytes: bytes) -> Optional[str]:
-        """Send audio to Gemini, return transcript string."""
-        def call():
-            resp = self._client.models.generate_content(
-                model=config.GEMINI_MODEL,
-                contents=[
-                    _TRANSCRIBE_PROMPT,
-                    types.Part.from_bytes(data=wav_bytes, mime_type="audio/wav"),
-                ],
-                config=types.GenerateContentConfig(
-                    temperature=0.0,
-                    max_output_tokens=200,
-                ),
-            )
-            return resp.text.strip()
-
-        with ThreadPoolExecutor(max_workers=1) as ex:
-            fut = ex.submit(call)
-            try:
-                result = fut.result(timeout=config.GEMINI_TIMEOUT_SEC)
-            except TimeoutError:
-                logger.warning("Transcription timed out")
-                return None
-            except Exception as exc:
-                logger.error("Transcription failed: %s", exc)
-                return None
+        """Transcribe audio using Groq Whisper."""
+        result = self._transcribe_groq(wav_bytes)
 
         if not result or result.upper() == "SILENCE":
             return ""
 
         logger.info("Transcript: '%s'", result)
         return result
+
+    def _transcribe_groq(self, wav_bytes: bytes) -> Optional[str]:
+        """Transcribe using Groq Whisper API."""
+        try:
+            boundary = "----KandaAudioBoundary"
+            body = (
+                f"--{boundary}\r\n"
+                f"Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n"
+                f"Content-Type: audio/wav\r\n\r\n"
+            ).encode() + wav_bytes + (
+                f"\r\n--{boundary}\r\n"
+                f"Content-Disposition: form-data; name=\"model\"\r\n\r\n"
+                f"whisper-large-v3-turbo\r\n"
+                f"--{boundary}\r\n"
+                f"Content-Disposition: form-data; name=\"language\"\r\n\r\n"
+                f"en\r\n"
+                f"--{boundary}\r\n"
+                f"Content-Disposition: form-data; name=\"prompt\"\r\n\r\n"
+                f"The speaker gives short English commands to a robot: move forward, turn left, find the bottle, what can you see, stop.\r\n"
+                f"--{boundary}--\r\n"
+            ).encode()
+
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                data=body,
+                headers={
+                    "Authorization": f"Bearer {config.GROQ_API_KEY}",
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                    "User-Agent": "KANDA/1.0",
+                },
+            )
+            resp = urllib.request.urlopen(req, timeout=10)
+            data = json.loads(resp.read())
+            text = data.get("text", "").strip()
+            if text:
+                logger.info("[groq-whisper] transcribed OK")
+                return text
+            return None
+        except Exception as e:
+            logger.warning("[groq-whisper] failed: %s", e)
+            return None
 
     def stop(self) -> None:
         self._mic.stop()

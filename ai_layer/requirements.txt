@@ -1,2 +1,14 @@
 pyserial>=3.5
 google-generativeai>=0.5.0
+
+# Phase 4 — Vision (Pi Camera v2.1)
+# picamera2 is installed system-wide on Raspberry Pi OS:
+#   sudo apt install python3-picamera2
+Pillow>=10.0.0
+
+# Phase 4 — Audio / TTS (Bluetooth speaker)
+pyttsx3>=2.90
+gTTS>=2.3.0
+pygame>=2.5.0
+# espeak-ng is the primary TTS engine (system package):
+#   sudo apt install espeak-ng

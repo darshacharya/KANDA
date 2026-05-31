@@ -10,12 +10,18 @@ so the LLM always reasons with full knowledge of the robot's physical state.
 """
 
 from collections import deque
+from datetime import datetime
 from typing import Optional
 
 import config
 
 # ── Static capability description (never changes) ────────────────────────────
-_CAPABILITIES = """ROBOT CAPABILITIES:
+_CAPABILITIES = """ROBOT IDENTITY:
+- Name: Kanda (ಕಂದ, means "child" in Kannada)
+- Created by: Sudarshan (only mention if asked "who made you" or similar)
+- Purpose: Multimodal embodied AI assistant
+
+ROBOT CAPABILITIES:
 - Movement: forward, backward, left, right, slight_left, slight_right, stop
 - Speed: integer 0-255 (120=normal, 180=fast, 80=slow)
 - Duration: any milliseconds (Pi controls timing, ESP32 executes)
@@ -23,6 +29,13 @@ _CAPABILITIES = """ROBOT CAPABILITIES:
 - Ultrasonic sensors: front, left, right distances in cm (-1 = no reading)
 - Speaker: says any text via Bluetooth speaker
 - Microphone: hears and transcribes voice commands
+- Telegram: accepts text, voice notes, and photos as commands
+- Presentation mode: can deliver pre-scripted slide presentations
+
+GENERAL KNOWLEDGE:
+- Can answer questions about date, time, general knowledge, news, weather, etc.
+- Can have conversations, answer follow-up questions using conversation history
+
 ROBOT LIMITATIONS:
 - Cannot pick up or manipulate objects
 - Cannot go up stairs or large steps
@@ -37,11 +50,12 @@ class BodyContext:
     One instance lives for the entire session.
     """
 
-    def __init__(self):
+    def __init__(self, conversation_maxlen: int = 20):
         self._sensors: dict = {"front": -1.0, "left": -1.0, "right": -1.0}
         self._scene: str = "Unknown — camera not yet used"
         self._state: str = "idle"
         self._action_history: deque = deque(maxlen=10)
+        self._conversation: deque = deque(maxlen=conversation_maxlen)
 
     # ── Updaters (called by main loop) ────────────────────────────────────────
 
@@ -62,6 +76,14 @@ class BodyContext:
         if speed > 0:
             entry += f" @{speed}"
         self._action_history.append(entry)
+
+    def add_turn(self, role: str, text: str) -> None:
+        """Add a conversation turn. role is 'user' or 'kanda'."""
+        self._conversation.append({"role": role, "text": text})
+
+    @property
+    def conversation(self) -> list:
+        return list(self._conversation)
 
     # ── Snapshot builder ──────────────────────────────────────────────────────
 
@@ -99,7 +121,10 @@ class BodyContext:
             warnings.append(f"WARNING: obstacle {s['right']}cm right")
         warn_str = " | ".join(warnings) if warnings else "path appears clear"
 
+        now = datetime.now()
         block = f"""{_CAPABILITIES}
+
+CURRENT DATE/TIME: {now.strftime('%A, %B %d, %Y at %I:%M %p')}
 
 CURRENT SENSOR READINGS:
   Front: {s['front']}cm  Left: {s['left']}cm  Right: {s['right']}cm
@@ -112,6 +137,15 @@ RECENT ACTIONS (last 5):
   {hist_str}
 
 ROBOT STATE: {self._state}"""
+
+        # Include recent conversation for continuity
+        if self._conversation:
+            recent = list(self._conversation)[-6:]  # last 6 turns
+            convo_lines = []
+            for turn in recent:
+                prefix = "User" if turn["role"] == "user" else "Kanda"
+                convo_lines.append(f"  {prefix}: {turn['text']}")
+            block += "\n\nRECENT CONVERSATION:\n" + "\n".join(convo_lines)
 
         if user_instruction:
             block += f"\n\nUSER INSTRUCTION: \"{user_instruction}\""

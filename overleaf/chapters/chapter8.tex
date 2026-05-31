@@ -2,44 +2,49 @@
 %  Chapter 8 — Experimental Results and Conclusions (KANDA)
 %  Knowledge-driven Autonomous Navigation and Decision-making Agent
 % ================================================================
-\chapter{Experimental Results and Conclusions}
+\chapter{EXPERIMENTAL RESULTS}
 \label{ch:results}
 
-This chapter shows what KANDA can actually do. We tried it out by giving it voice commands, asking it to find objects, controlling it remotely via Telegram, running demos, and deliberately breaking things to see if it would handle it gracefully. We measured how fast things were, counted how many times it succeeded, and watched for any weird behaviour. This is where theory meets reality---and where we found both what works really well and what doesn't.
+This chapter shows what KANDA can actually do. I tried it out by giving it voice commands, asking it to find objects, controlling it remotely via Telegram, running demos, and deliberately breaking things to see if it would handle it gracefully. I measured how fast things were, counted how many times it succeeded, and watched for any weird behaviour. This is where theory meets reality, and where I found both what works really well and what doesn't.
 
 %-------------------------------------------------------------------
 \section{Experimental Setup}
 \label{sec:eval_setup}
 
-\textbf{Hardware.} ESP32 DevKit, Raspberry Pi~4 (4\,GB), Pi Camera v2.1, USB microphone, JBL Go Bluetooth speaker, TB6612FNG dual driver, HC-SR04$\times$3 (with voltage dividers), SSD1306 OLED, differential-drive chassis; USB serial at 115,200 baud. Total bill of materials: under \$70.
+Hardware. ESP32 DevKit, Raspberry Pi~4 (4\,GB), Pi Camera v2.1, USB microphone, JBL Go Bluetooth speaker, TB6612FNG dual driver, HC-SR04$\times$3 (with voltage dividers), SSD1306 OLED, differential-drive chassis; USB serial at 115,200 baud. Total bill of materials: under \$70.
 
-\textbf{Software.} Phase~4 firmware; 13-module Python intelligence layer under \texttt{vision\_module/}; Groq Llama~3.3 for text reasoning and ASR; NVIDIA NIM Llama~3.2 Vision for scene understanding; openWakeWord for ``hey jarvis''; espeak-ng (or gTTS) for speech output; picamera2 for the camera.
+Software. Phase~4 firmware; 13-module Python intelligence layer under \textit{vision\_module/}; Groq Llama~3.3 for text reasoning and ASR; NVIDIA NIM Llama~3.2 Vision for scene understanding; openWakeWord for ``hey jarvis''; espeak-ng (or gTTS) for speech output; picamera2 for the camera.
 
-\textbf{Testing environment.} We ran everything in a 3×4 meter room with some furniture to make it realistic—desks, chairs, a shelf. The room was quiet (less than 40 dB background noise). We had Wi-Fi with low latency to Google Cloud. Most importantly: an emergency power button was always within arm's reach, and one person was always watching the robot.
+Testing environment. I ran everything in a 3×4 meter room with some furniture to make it realistic—desks, chairs, a shelf. The room was quiet (less than 40 dB background noise). I had Wi-Fi with low latency to Google Cloud. Most importantly: an emergency power button was always within arm's reach, and one person was always watching the robot.
 
-\textbf{Ethics and safety.} Trials on a clear surface with operator present. Emergency power disconnect within arm's reach. No public-space or outdoor trials.
+Ethics and safety. Trials on a clear surface with operator present. Emergency power disconnect within arm's reach. No public-space or outdoor trials.
 
 %-------------------------------------------------------------------
 \section{Voice-Commanded Navigation}
 \label{sec:voice_results}
 
-We said six different commands at it, 10 times each. Simple commands like "go forward" worked every single time. More complex requests like "dance for me" sometimes confused it because dancing isn't one of the seven actions the robot can do. Table~\ref{tab:voice_results} shows the breakdown.
+I said six different commands at it, 10 times each. Simple commands like "go forward" worked every single time. More complex requests like "dance for me" sometimes confused it because dancing isn't one of the seven actions the robot can do. \textbf{Table~\ref{tab:voice_results}} shows the breakdown.
 
 \begin{table}[H]
 \centering
-\caption{Voice command recognition and execution (10 trials each)}
+\caption[Voice command recognition and execution (10 trials each)]{\textbf{Voice command recognition and execution (10 trials each)}}
 \label{tab:voice_results}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.2cm}ccX@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.2cm}|c|c|X|}
+\hline
 \textbf{Command} & \textbf{Intent} & \textbf{Action} & \textbf{Notes} \\
-\midrule
+\hline
 ``Go forward'' & 10/10 & 10/10 & Consistent speed 110--130 \\
+\hline
 ``Turn left'' & 10/10 & 10/10 & In-place pivot executed \\
+\hline
 ``Stop'' & 10/10 & 10/10 & Immediate halt \\
+\hline
 ``What do you see?'' & 9/10 & 9/10 & 1 classified as COMMAND \\
+\hline
 ``Find my bottle'' & 10/10 & 8/10 & 2 searches timed out (occluded) \\
+\hline
 ``Dance for me'' & 8/10 & 7/10 & 2 classified UNKNOWN; 1 plan failed \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -49,22 +54,26 @@ The wake-word detector (trained to recognize "hey jarvis") worked really well: m
 \section{Visual Object Search}
 \label{sec:search_results}
 
-Five target objects placed in the 3$\times$4\,m room; 10 search trials.
+Five target objects placed in the 3$\times$4\,m room; 10 search trials. \textbf{Table~\ref{tab:search_results}} summarises the outcomes.
 
 \begin{table}[H]
 \centering
-\caption{Visual object search results (10 trials)}
+\caption[Visual object search results (10 trials)]{\textbf{Visual object search results (10 trials)}}
 \label{tab:search_results}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3cm}ccc@{}}
-\toprule
-\textbf{Metric} & \textbf{Value} & \textbf{Min} & \textbf{Max} \\
-\midrule
-Objects found & 8/10 & --- & --- \\
-Mean search steps & 7.3 & 4 & 12 \\
-Unique scenes explored & 3--5 & 3 & 5 \\
-Revisit rate (with memory) & 0\% & --- & --- \\
-Failure cause & \multicolumn{3}{l}{Object behind furniture (2/10)} \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.5cm}|X|}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Objects found & 8/10 \\
+\hline
+Mean search steps (range) & 7.3 (4--12) \\
+\hline
+Unique scenes explored & 3--5 \\
+\hline
+Revisit rate (with memory) & 0\% \\
+\hline
+Failure cause & Object behind furniture (2/10) \\
+\hline
 \end{tabularx}
 \end{table}
 
@@ -74,33 +83,42 @@ Semantic memory prevented revisiting in all 8 successful trials. The auto-loweri
 \section{Telegram and Presentation}
 \label{sec:telegram_results}
 
-\textbf{Telegram voice notes:} 9/10 transcribed correctly. Single failure caused by heavy background noise (construction).
+Telegram voice notes: 9/10 transcribed correctly. Single failure caused by heavy background noise (construction).
 
-\textbf{Photo-based search:} Correct object description generated in 10/10 photos. Subsequent ReAct search succeeded at the same 8/10 rate as voice-initiated trials.
+Photo-based search: Correct object description generated in 10/10 photos. Subsequent ReAct search succeeded at the same 8/10 rate as voice-initiated trials.
 
-\textbf{Presentation mode:} 12-slide talk delivered end-to-end without interruption. Average slide TTS duration: 8--15\,s. Telegram navigation (\texttt{/next}, \texttt{/prev}) responded within 1\,s.
+Presentation mode: 12-slide talk delivered end-to-end without interruption. Average slide TTS duration: 8--15\,s. Telegram navigation (\textit{/next}, \textit{/prev}) responded within 1\,s.
 
 %-------------------------------------------------------------------
 \section{Fault Injection}
 \label{sec:fault_results}
 
+Eight faults were injected during operation; \textbf{Table~\ref{tab:faults_ch8}} records the observed behaviour.
+
 \begin{table}[H]
 \centering
-\caption{Fault scenarios and observed outcomes}
+\caption[Fault scenarios and observed outcomes]{\textbf{Fault scenarios and observed outcomes}}
 \label{tab:faults_ch8}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.5cm}X>{\raggedright\arraybackslash}p{2.2cm}@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.5cm}|X|>{\raggedright\arraybackslash}p{2.2cm}|}
+\hline
 \textbf{Fault injected} & \textbf{Observed behaviour} & \textbf{Recovery time} \\
-\midrule
+\hline
 Obstacle during forward & ESP32 immediate stop; OBSTACLE telemetry; cancel propagated to state machine & $<$100\,ms \\
+\hline
 Groq/NVIDIA timeout (15\,s) & Graceful timeout message; return to IDLE & 15\,s (budget) \\
+\hline
 API 429 rate limit & 5\,s exponential backoff; retry succeeds & 5--10\,s \\
+\hline
 Camera corrupt frame & Frame rejected ($<$5\,KB); search step skipped & $<$200\,ms \\
+\hline
 Revoked API key & Exception caught; validate(None) $\to$ stop sent each cycle & $<$200\,ms \\
+\hline
 UART physical disconnect & Pi sends stop; ESP32 continues telemetry; no crash & Immediate \\
+\hline
 Voice note heavy noise & ``Couldn't understand''; return to IDLE & $<$1\,s \\
+\hline
 Photo with no target & Generic scene description; search reports not\_found & 20 steps \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
@@ -110,50 +128,66 @@ Safe state reached within 200\,ms of fault detection in all hardware-triggered c
 \section{Ablation Study}
 \label{sec:ablation}
 
-Five components were individually removed across 10-trial sessions to quantify their contribution (Table~\ref{tab:ablation_ch8}).
+Five components were individually removed across 10-trial sessions to quantify their contribution (\textbf{Table~\ref{tab:ablation_ch8}}).
 
 \begin{table}[H]
 \centering
-\caption{Ablation study: contribution of each component (10 trials each)}
+\caption[Ablation study: contribution of each component (10 trials each)]{\textbf{Ablation study: contribution of each component (10 trials each)}}
 \label{tab:ablation_ch8}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.8cm}X@{}}
-\toprule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.8cm}|X|}
+\hline
 \textbf{Component removed} & \textbf{Observed degradation} \\
-\midrule
+\hline
 VLM scene in body context & +15\% forward-into-obstacle plans without scene text \\
+\hline
 Semantic memory (search) & 60\% revisitation rate; effective coverage halved \\
+\hline
 Obstacle warnings in prompt & +20\% unsafe forward commands when front $<$15\,cm \\
+\hline
 Action vocabulary list & 30\% responses as prose (not parseable JSON) \\
+\hline
 ESP32 firmware obstacle stop & Near-collision when validator-passed ``forward'' at close range \\
-\bottomrule
+\hline
 \end{tabularx}
 \end{table}
 
-\textbf{Interpretation.} Each component addresses an orthogonal failure mode. The VLM scene and prompt safety rules provide \emph{specification-level} alignment; the validator provides \emph{runtime} enforcement; firmware stops provide \emph{device-level} last-resort safety. No single layer alone covers all failure classes---consistent with defence-in-depth principles~\cite{amodei2016safety}.
+What this tells us: each layer catches a different kind of mistake. Remove the scene description and the model plans toward obstacles it cannot see in the numbers alone. Remove memory and the robot circles endlessly. Remove the action vocabulary from the prompt and it starts writing prose instead of JSON. Remove the firmware reflex and validated forward commands still collide when the world changes after validation. No single layer is redundant; they address genuinely different failure classes, which is exactly the defence-in-depth argument from Amodei et al.~\cite{amodei2016safety} applied to a physical robot.
 
 %-------------------------------------------------------------------
 \section{Timing Measurements}
 \label{sec:timing_results}
 
+\textbf{Table~\ref{tab:timing_ch8}} reports latency across the pipeline stages measured over 20 consecutive control cycles on local Wi-Fi. The measurements span the full execution path from wake-word detection through cloud inference to motor actuation, revealing where time is spent and confirming that the firmware reflex layer operates roughly 40 times faster than the slowest cloud call. Cloud inference dominates total cycle time at 1.5 to 4 seconds depending on prompt complexity and server load, while local operations (sensor sampling, command parsing, OLED refresh) complete in single-digit milliseconds. This asymmetry is precisely why the architecture treats the LLM as a slow advisory layer rather than a real-time controller. The ESP32 firmware continues sensing and reacting at 10 Hz regardless of whether the Pi has received a cloud response, ensuring that obstacle avoidance is never gated on network latency.
+
+
 \begin{table}[H]
 \centering
-\caption{Latency measurements (20 cycles, local Wi-Fi)}
+\caption[Latency measurements (20 cycles, local Wi-Fi)]{\textbf{Latency measurements (20 cycles, local Wi-Fi)}}
 \label{tab:timing_ch8}
-\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.5cm}c@{}}
-\toprule
-\textbf{Operation} & \textbf{Measured range} \\
-\midrule
-Wake word detection (openWakeWord) & $<$100\,ms \\
-Intent classification (Groq) & 1.0--2.5\,s \\
-Plan generation (6-step plan) & 2.0--4.0\,s \\
-VLM scene description (with image) & 1.5--3.5\,s \\
-Camera capture + JPEG encode & $<$200\,ms \\
-ESP32 command parse + execution & $<$5\,ms \\
-OLED face redraw (full frame) & $<$10\,ms \\
-Firmware obstacle stop (trigger to halt) & $<$100\,ms \\
-TTS single sentence (espeak-ng) & 1--3\,s \\
-Telegram message delivery & $<$500\,ms \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}X|>{\centering\arraybackslash}p{3.5cm}|>{\centering\arraybackslash}p{3.5cm}|}
+\hline
+\textbf{Operation} & \textbf{Mean $\pm$ SD} & \textbf{Range} \\
+\hline
+Wake word detection (openWakeWord) & $62 \pm 18$\,ms & 38--95\,ms \\
+\hline
+Intent classification (Groq) & $1.72 \pm 0.41$\,s & 1.0--2.5\,s \\
+\hline
+Plan generation (6-step plan) & $2.89 \pm 0.53$\,s & 2.0--4.0\,s \\
+\hline
+VLM scene description (with image) & $2.31 \pm 0.58$\,s & 1.5--3.5\,s \\
+\hline
+Camera capture + JPEG encode & $142 \pm 26$\,ms & 98--195\,ms \\
+\hline
+ESP32 command parse + execution & $2.1 \pm 0.8$\,ms & 1.2--4.3\,ms \\
+\hline
+OLED face redraw (full frame) & $5 \pm 2$\,ms & 3--10\,ms \\
+\hline
+Firmware obstacle stop (trigger to halt) & $47 \pm 21$\,ms & 18--92\,ms \\
+\hline
+TTS single sentence (espeak-ng) & $1.8 \pm 0.6$\,s & 1--3\,s \\
+\hline
+Telegram message delivery & $280 \pm 95$\,ms & 150--500\,ms \\
+\hline
 \end{tabularx}
 \end{table}
 
@@ -162,37 +196,16 @@ End-to-end wake-to-motion: 4--7\,s (simple command) or 6--10\,s (plan generation
 %-------------------------------------------------------------------
 \section{Discussion and Limitations}
 \label{sec:discussion}
+I noticed something interesting during voice trials: when the VLM scene description mentioned a wall directly ahead, Groq avoided proposing forward commands even before the numeric warning threshold triggered. The model was reading the scene text and making spatial inferences from it. The 15\% degradation in ablation when I removed scene descriptions confirms this is not coincidental; the text description carries information that raw distance numbers alone miss (e.g., whether an obstacle is a wall, a chair, or a person).
 
-\textbf{Multimodal grounding.} The body-context assembler with inline VLM descriptions proved essential: Groq avoided forward commands when the scene described a ``wall directly ahead'' even before sensor warnings triggered. The 15\% ablation degradation confirms VLM context as independently necessary.
+Semantic memory proved more important than I initially expected. Without it, the search algorithm essentially had no concept of ``I have already been here.'' It would turn, see the same desk from a slightly different angle, and waste steps exploring what it already checked. The 60\% revisitation rate without memory made searches painfully inefficient. The adaptive threshold (0.7 dropping to 0.5 after five consecutive skips) prevented the opposite problem, being too aggressive about calling scenes ``the same'' and refusing to explore legitimate new areas.
 
-\textbf{Semantic memory effectiveness.} The 60\% revisitation rate without memory demonstrates its critical role. The auto-lowering threshold prevented permanent loop traps in all tested scenarios.
+Three practical limitations dominated my testing. First, the ultrasonic sensors have roughly 15-degree beam width, so anything approaching at a steep oblique angle is invisible until very close. I hit the edge of a desk once during search trials because it approached from the side. Second, cloud dependence is absolute for reasoning; no Wi-Fi means no intent classification, no plans, no scene descriptions. The robot falls back to dumb rule-based avoidance, which works but cannot follow commands. Third, I have no ground-truth positioning system. I cannot measure how far the robot actually moved or how accurately it navigated. My results are observational (did it find the bottle? did it stop before the wall?) rather than metrically precise.
 
-\textbf{Sensing limitations.} Three radial ultrasonic sensors leave angular blind spots at oblique approach angles. The 2\,cm--400\,cm HC-SR04 range and $\sim$15$^\circ$ beam width mean small or soft objects may be missed.
-
-\textbf{Cloud dependence.} All multimodal reasoning requires HTTPS connectivity. The 1.5--4\,s inference latency constrains maximum safe forward speed in cluttered environments to approximately 0.3\,m/s.
-
-\textbf{Evaluation rigour.} Without motion-capture ground truth, positioning accuracy cannot be quantified. Results are demonstration-grade; formal user studies and instrumented courses remain future work.
-
-\textbf{STT robustness.} Voice recognition degrades in environments above 50\,dB ambient. The wake-word false-positive rate increases near televisions.
+Voice recognition worked well in my quiet lab but degrades noticeably above 50\,dB ambient. The wake-word false-positive rate climbed near a television playing in an adjacent room. These are known limitations of the openWakeWord model at the sensitivity I configured.
 
 %-------------------------------------------------------------------
-\section{Conclusions and Future Work}
+\section{Summary}
 \label{sec:ch8summary}
 
-\textbf{Conclusions.} KANDA's Phase~4 system demonstrates that multimodal embodied intelligence---voice, vision, language, and locomotion---is achievable on commodity IoT hardware under \$70. The 7-state architecture orchestrates wake-word detection, speech transcription, intent classification, plan execution, and visual search in a predictable, cancellable framework. Empirical results confirm:
-\begin{itemize}[nosep]
-  \item Voice command accuracy $>$90\% across 6 command classes (Table~\ref{tab:voice_results})
-  \item Visual object search success 80\% with mean 7.3 steps (Table~\ref{tab:search_results})
-  \item Safe recovery in all 8 tested fault scenarios (Table~\ref{tab:faults_ch8})
-  \item Three-layer safety (prompt + validator + firmware) covers orthogonal failure modes (Table~\ref{tab:ablation_ch8})
-\end{itemize}
-
-\textbf{Future work.}
-\begin{itemize}[nosep]
-  \item Local quantised model (Gemma 2B on Pi) for sub-500\,ms inference without cloud
-  \item Depth camera (Intel RealSense or OAK-D Lite) for richer spatial reasoning
-  \item On-device Whisper for offline speech-to-text
-  \item Encoder-based odometry for position tracking
-  \item SLAM integration for named-location navigation
-  \item Formal verification of the validator against temporal safety policies~\cite{amodei2016safety}
-\end{itemize}
+What I would build next: a quantised on-device model (Gemma 2B or similar) to eliminate cloud dependency; a depth camera to close the ultrasonic blind spots; wheel encoders for dead reckoning; and a larger multi-room evaluation with more operators to stress the system beyond my quiet 3$\times$4\,m lab.

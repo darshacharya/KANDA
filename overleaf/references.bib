@@ -2,22 +2,42 @@
 %  references.bib — KANDA Project Report References
 %  A Multimodal Embodied Robot Agent Powered by LLMs
 %  with Hardware Aware Action Generation
+%  Arranged: newest (2024) → oldest (1986)
 % ================================================================
 
-% ---- Embodied AI & LLM-Robot Integration ----
+% ---- 2024 ----
+
+@article{vemprala2024chatgpt,
+  author  = {S. Vemprala and R. Bonatti and A. Bucker and A. Kapoor},
+  title   = {{ChatGPT} for Robotics: Design Principles and Model Abilities},
+  journal = {IEEE Access},
+  volume  = {12},
+  pages   = {1--20},
+  year    = {2024},
+}
+
+@techreport{ifr2024report,
+  author      = {{International Federation of Robotics}},
+  title       = {World Robotics 2024 --- Service Robots},
+  institution = {IFR Statistical Department},
+  year        = {2024},
+  address     = {Frankfurt, Germany},
+}
+
+@misc{openwakeword2024,
+  author = {Theres, David},
+  title  = {{openWakeWord}: Open-source wakeword detection for the Raspberry Pi},
+  year   = {2024},
+  note   = {\url{https://github.com/dscripka/openWakeWord}},
+}
+
+% ---- 2023 ----
 
 @inproceedings{driess2023palme,
   author    = {D. Driess and F. Xia and M. S. M. Sajjadi and C. Lynch and A. Chowdhery and B. Ichter and A. Wahid and J. Tompson and Q. Vuong and T. Yu and W. Huang and Y. Chebotar and P. Sermanet and D. Duckworth and S. Levine and V. Vanhoucke and K. Hausman and M. Toussaint and K. Greff and A. Zeng and I. Mordatch and P. Florence},
   title     = {{PaLM-E}: An Embodied Multimodal Language Model},
   booktitle = {Proc. 40th Int. Conf. Machine Learning (ICML)},
   year      = {2023},
-}
-
-@inproceedings{ahn2022saycan,
-  author    = {M. Ahn and A. Brohan and N. Brown and Y. Chebotar and O. Cortes and B. David and C. Finn and C. Fu and K. Gopalakrishnan and K. Hausman and A. Herzog and D. Ho and J. Hsu and J. Ibarz and B. Ichter and A. Irpan and E. Jang and R. J. Morat and K. Jeffrey and S. Jesmonth and others},
-  title     = {Do As {I} Can, Not As {I} Say: Grounding Language in Robotic Affordances},
-  booktitle = {Proc. Conf. Robot Learning (CoRL)},
-  year      = {2022},
 }
 
 @article{brohan2023rt2,
@@ -28,13 +48,12 @@
   month   = jul,
 }
 
-@article{vemprala2024chatgpt,
-  author  = {S. Vemprala and R. Bonatti and A. Bucker and A. Kapoor},
-  title   = {{ChatGPT} for Robotics: Design Principles and Model Abilities},
-  journal = {IEEE Access},
-  volume  = {12},
-  pages   = {1--20},
-  year    = {2024},
+@inproceedings{brohan2022rt1,
+  author    = {A. Brohan and N. Brown and J. Carbajal and Y. Chebotar and J. Dabis and C. Finn and K. Gopalakrishnan and K. Hausman and A. Herzog and J. Hsu and others},
+  title     = {{RT-1}: Robotics Transformer for Real-World Control at Scale},
+  booktitle = {Proc. Robotics: Science and Systems (RSS)},
+  year      = {2023},
+  note      = {arXiv:2212.06817},
 }
 
 @inproceedings{liang2023code,
@@ -87,7 +106,12 @@
   year      = {2023},
 }
 
-% ---- Hardware & Embedded Systems ----
+@article{yao2023react,
+  author  = {S. Yao and J. Zhao and D. Yu and N. Du and I. Shafran and K. Narasimhan and Y. Cao},
+  title   = {{ReAct}: Synergizing Reasoning and Acting in Language Models},
+  booktitle = {Proc. Int. Conf. Learning Representations (ICLR)},
+  year    = {2023},
+}
 
 @manual{espressif2023esp32,
   author       = {{Espressif Systems}},
@@ -97,56 +121,13 @@
   organization = {Espressif Systems (Shanghai) Co., Ltd.},
 }
 
-% ---- Foundation Models ----
+% ---- 2022 ----
 
-@inproceedings{vaswani2017attention,
-  author    = {A. Vaswani and N. Shazeer and N. Parmar and J. Uszkoreit and L. Jones and A. N. Gomez and L. Kaiser and I. Polosukhin},
-  title     = {Attention is All You Need},
-  booktitle = {Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)},
-  volume    = {30},
-  address   = {Long Beach, CA, USA},
-  year      = {2017},
-  pages     = {5998--6008},
-}
-
-% ---- Classical robotics ----
-
-@article{brooks1986robust,
-  author  = {R. A. Brooks},
-  title   = {A Robust Layered Control System for a Mobile Robot},
-  journal = {IEEE Journal of Robotics and Automation},
-  volume  = {2},
-  number  = {1},
-  pages   = {14--23},
-  year    = {1986},
-}
-
-% ---- Safety ----
-
-@article{amodei2016safety,
-  author  = {Amodei, Dario and Olah, Chris and Steinhardt, Jacob and Christiano, Paul and Schulman, John and Man\'{e}, Dan},
-  title   = {Concrete Problems in {AI} Safety},
-  journal = {arXiv preprint arXiv:1606.06565},
-  year    = {2016},
-}
-
-% ---- Industry Reports ----
-
-@techreport{ifr2024report,
-  author      = {{International Federation of Robotics}},
-  title       = {World Robotics 2024 --- Service Robots},
-  institution = {IFR Statistical Department},
-  year        = {2024},
-  address     = {Frankfurt, Germany},
-}
-
-% ---- Additional Citations (Paper) ----
-
-@article{yao2023react,
-  author  = {T. Yao and D. Yu and Y. Su and Y. Zhang and Y. Wang},
-  title   = {ReAct: Synergizing Reasoning and Acting in Language Models},
-  journal = {arXiv preprint arXiv:2210.03629},
-  year    = {2023},
+@inproceedings{ahn2022saycan,
+  author    = {M. Ahn and A. Brohan and N. Brown and Y. Chebotar and O. Cortes and B. David and C. Finn and C. Fu and K. Gopalakrishnan and K. Hausman and A. Herzog and D. Ho and J. Hsu and J. Ibarz and B. Ichter and A. Irpan and E. Jang and R. J. Morat and K. Jeffrey and S. Jesmonth and others},
+  title     = {Do As {I} Can, Not As {I} Say: Grounding Language in Robotic Affordances},
+  booktitle = {Proc. Conf. Robot Learning (CoRL)},
+  year      = {2022},
 }
 
 @inproceedings{wei2022cot,
@@ -163,11 +144,33 @@
   year      = {2022},
 }
 
-@inproceedings{fox1997dwa,
-  author    = {D. Fox and W. Burgard and S. Thrun},
-  title     = {The Dynamic Window Approach to Collision Avoidance},
-  booktitle = {Proc. IEEE/RSJ Int. Conf. Intelligent Robots Syst. (IROS)},
-  year      = {1997},
+@inproceedings{huang2022zeroshot,
+  author    = {W. Huang and P. Abbeel and D. Pathak and I. Mordatch},
+  title     = {Language Models as Zero-Shot Planners: Extracting Actionable Knowledge for Embodied Agents},
+  booktitle = {Proc. Int. Conf. Machine Learning (ICML)},
+  year      = {2022},
+  note      = {arXiv:2201.07207},
+}
+
+% ---- 2017 ----
+
+@inproceedings{vaswani2017attention,
+  author    = {A. Vaswani and N. Shazeer and N. Parmar and J. Uszkoreit and L. Jones and A. N. Gomez and L. Kaiser and I. Polosukhin},
+  title     = {Attention is All You Need},
+  booktitle = {Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)},
+  volume    = {30},
+  address   = {Long Beach, CA, USA},
+  year      = {2017},
+  pages     = {5998--6008},
+}
+
+% ---- 2016 ----
+
+@article{amodei2016safety,
+  author  = {Amodei, Dario and Olah, Chris and Steinhardt, Jacob and Christiano, Paul and Schulman, John and Man\'{e}, Dan},
+  title   = {Concrete Problems in {AI} Safety},
+  journal = {arXiv preprint arXiv:1606.06565},
+  year    = {2016},
 }
 
 @article{shi2016edge,
@@ -180,6 +183,8 @@
   year    = {2016},
 }
 
+% ---- 2012 ----
+
 @article{bonomi2012fog,
   author  = {F. Bonomi and R. Milito and J. Zhu and S. Addepalli},
   title   = {Fog Computing and Its Role in the Internet of Things},
@@ -190,16 +195,33 @@
   year    = {2012},
 }
 
-@misc{openwakeword2024,
-  author = {Theres, David},
-  title  = {{openWakeWord}: Open-source wakeword detection for the Raspberry Pi},
-  year   = {2024},
-  note   = {\url{https://github.com/dscripka/openWakeWord}},
+% ---- 1997 ----
+
+@inproceedings{fox1997dwa,
+  author    = {D. Fox and W. Burgard and S. Thrun},
+  title     = {The Dynamic Window Approach to Collision Avoidance},
+  booktitle = {Proc. IEEE/RSJ Int. Conf. Intelligent Robots Syst. (IROS)},
+  year      = {1997},
 }
 
+% ---- 1988 ----
+
 @article{ratcliff1988,
-  author  = {D. Ratcliff},
-  title   = {Gestalt Theory and the Problem of Configuration},
-  journal = {Theoretical Issues in Psychology},
+  author  = {J. W. Ratcliff and D. Metzener},
+  title   = {Pattern Matching: The Gestalt Approach},
+  journal = {Dr. Dobb's Journal},
   year    = {1988},
+  month   = jul,
+}
+
+% ---- 1986 ----
+
+@article{brooks1986robust,
+  author  = {R. A. Brooks},
+  title   = {A Robust Layered Control System for a Mobile Robot},
+  journal = {IEEE Journal of Robotics and Automation},
+  volume  = {2},
+  number  = {1},
+  pages   = {14--23},
+  year    = {1986},
 }
