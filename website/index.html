@@ -19,12 +19,13 @@
             --accent-glow: rgba(0, 229, 255, 0.3);
             --accent-2: #ff3d71;
             --accent-3: #a855f7;
+            --green: #00ff88;
+            --orange: #ffaa00;
             --font-display: 'Outfit', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         html { scroll-behavior: smooth; }
 
         body {
@@ -40,16 +41,13 @@
             inset: 0;
             pointer-events: none;
             z-index: 9999;
-            opacity: 0.03;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.025;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
         }
 
-        /* NAV */
         nav {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
+            top: 0; left: 0; right: 0;
             z-index: 100;
             padding: 1.2rem 3rem;
             display: flex;
@@ -68,12 +66,7 @@
             letter-spacing: -0.5px;
         }
 
-        .nav-links {
-            display: flex;
-            gap: 2.5rem;
-            list-style: none;
-        }
-
+        .nav-links { display: flex; gap: 2.5rem; list-style: none; }
         .nav-links a {
             color: var(--text-dim);
             text-decoration: none;
@@ -82,22 +75,19 @@
             letter-spacing: 0.5px;
             transition: color 0.3s;
         }
-
         .nav-links a:hover { color: var(--accent); }
 
-        /* HERO */
         #hero {
             min-height: 100vh;
             display: flex;
             align-items: center;
             padding: 8rem 5% 4rem;
-            position: relative;
         }
 
         .hero-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4rem;
+            grid-template-columns: 1fr 1.1fr;
+            gap: 3rem;
             width: 100%;
             max-width: 1400px;
             margin: 0 auto;
@@ -113,7 +103,6 @@
         }
 
         .hero-text h1 span {
-            display: inline-block;
             background: linear-gradient(135deg, var(--accent), var(--accent-3));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -128,23 +117,13 @@
             font-weight: 300;
         }
 
-        .hero-stats {
-            display: flex;
-            gap: 2.5rem;
-            margin-top: 2rem;
-        }
-
-        .stat {
-            text-align: left;
-        }
-
+        .hero-stats { display: flex; gap: 2.5rem; margin-top: 2rem; }
         .stat-value {
             font-family: var(--font-mono);
             font-size: 2rem;
             font-weight: 700;
             color: var(--accent);
         }
-
         .stat-label {
             font-size: 0.75rem;
             color: var(--text-dim);
@@ -154,7 +133,7 @@
         }
 
         .hero-3d {
-            height: 550px;
+            height: 580px;
             position: relative;
             border-radius: 20px;
             overflow: hidden;
@@ -180,6 +159,21 @@
             pointer-events: none;
         }
 
+        .component-labels {
+            position: absolute;
+            top: 1rem; left: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            line-height: 1.8;
+            background: rgba(10, 10, 15, 0.85);
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            pointer-events: none;
+        }
+        .component-labels .hl { color: var(--accent); }
+
         /* FEATURES */
         #features {
             padding: 6rem 5%;
@@ -187,11 +181,7 @@
             margin: 0 auto;
         }
 
-        .section-header {
-            text-align: center;
-            margin-bottom: 4rem;
-        }
-
+        .section-header { text-align: center; margin-bottom: 4rem; }
         .section-tag {
             font-family: var(--font-mono);
             font-size: 0.75rem;
@@ -201,7 +191,6 @@
             margin-bottom: 1rem;
             display: block;
         }
-
         .section-title {
             font-size: clamp(2rem, 4vw, 3.2rem);
             font-weight: 800;
@@ -223,64 +212,40 @@
             position: relative;
             overflow: hidden;
         }
-
         .feature-card::before {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
+            top: 0; left: 0; right: 0;
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--accent), transparent);
             opacity: 0;
             transition: opacity 0.4s;
         }
-
         .feature-card:hover {
             border-color: var(--accent);
             transform: translateY(-4px);
             box-shadow: 0 20px 60px rgba(0, 229, 255, 0.08);
         }
-
         .feature-card:hover::before { opacity: 1; }
-
         .feature-icon {
-            width: 48px;
-            height: 48px;
+            width: 48px; height: 48px;
             border-radius: 12px;
             background: rgba(0, 229, 255, 0.1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             font-size: 1.5rem;
             margin-bottom: 1.2rem;
         }
-
-        .feature-card h3 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 0.6rem;
-        }
-
-        .feature-card p {
-            font-size: 0.85rem;
-            color: var(--text-dim);
-            font-weight: 300;
-            line-height: 1.7;
-        }
+        .feature-card h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.6rem; }
+        .feature-card p { font-size: 0.85rem; color: var(--text-dim); font-weight: 300; line-height: 1.7; }
 
         /* PLAYGROUND */
-        #playground {
-            padding: 6rem 5%;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
+        #playground { padding: 6rem 5%; max-width: 1500px; margin: 0 auto; }
 
         .playground-container {
             display: grid;
-            grid-template-columns: 1fr 320px;
+            grid-template-columns: 1fr 340px;
             gap: 1.5rem;
-            height: 600px;
+            height: 650px;
         }
 
         .playground-viewport {
@@ -291,216 +256,180 @@
             background: var(--surface);
         }
 
-        .playground-viewport canvas { display: block; }
-
-        .viewport-overlay {
+        .viewport-hud {
             position: absolute;
-            top: 1rem;
-            left: 1rem;
+            top: 1rem; left: 1rem;
             font-family: var(--font-mono);
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: var(--accent);
-            background: rgba(10, 10, 15, 0.85);
-            padding: 0.6rem 1rem;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            pointer-events: none;
-        }
-
-        .viewport-status {
-            position: absolute;
-            bottom: 1rem;
-            left: 1rem;
-            right: 1rem;
-            font-family: var(--font-mono);
-            font-size: 0.7rem;
-            color: var(--text-dim);
             background: rgba(10, 10, 15, 0.9);
             padding: 0.8rem 1rem;
             border-radius: 8px;
             border: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
+            pointer-events: none;
+            line-height: 1.8;
+            min-width: 200px;
+        }
+        .hud-state { color: var(--green); font-weight: 700; }
+        .hud-dim { color: var(--text-dim); }
+
+        .viewport-oled {
+            position: absolute;
+            top: 1rem; right: 1rem;
+            width: 64px; height: 48px;
+            background: #000;
+            border: 2px solid #333;
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem;
+            pointer-events: none;
+            transition: all 0.3s;
         }
 
-        .status-indicator {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
+        .viewport-bottom {
+            position: absolute;
+            bottom: 1rem; left: 1rem; right: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            background: rgba(10, 10, 15, 0.9);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
         }
 
-        .status-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #00ff88;
-            animation: pulse-dot 2s infinite;
+        .log-output {
+            position: absolute;
+            bottom: 3.5rem; left: 1rem; right: 1rem;
+            max-height: 80px;
+            overflow-y: auto;
+            font-family: var(--font-mono);
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            background: rgba(10, 10, 15, 0.85);
+            padding: 0.5rem 0.8rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            pointer-events: none;
         }
-
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
+        .log-output .log-line { margin-bottom: 2px; }
+        .log-output .log-accent { color: var(--accent); }
+        .log-output .log-warn { color: var(--orange); }
 
         .playground-controls {
             display: flex;
             flex-direction: column;
             gap: 1rem;
+            overflow-y: auto;
         }
 
         .control-panel {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 16px;
-            padding: 1.5rem;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
+            padding: 1.2rem;
         }
 
         .panel-title {
             font-family: var(--font-mono);
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: var(--accent);
             text-transform: uppercase;
             letter-spacing: 2px;
-            margin-bottom: 1rem;
-            padding-bottom: 0.8rem;
+            margin-bottom: 0.8rem;
+            padding-bottom: 0.6rem;
             border-bottom: 1px solid var(--border);
         }
 
         .command-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 0.5rem;
-            margin-bottom: 1rem;
+            gap: 0.4rem;
         }
 
         .cmd-btn {
             background: var(--surface-2);
             border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 0.7rem 0.4rem;
+            border-radius: 8px;
+            padding: 0.6rem 0.3rem;
             color: var(--text);
             font-family: var(--font-mono);
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
             text-align: center;
             user-select: none;
         }
+        .cmd-btn:hover { border-color: var(--accent); background: rgba(0, 229, 255, 0.05); color: var(--accent); }
+        .cmd-btn:active { transform: scale(0.93); background: rgba(0, 229, 255, 0.15); }
+        .cmd-btn.active { border-color: var(--accent); background: rgba(0, 229, 255, 0.1); color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
 
-        .cmd-btn:hover {
-            border-color: var(--accent);
-            background: rgba(0, 229, 255, 0.05);
-            color: var(--accent);
-        }
-
-        .cmd-btn:active {
-            transform: scale(0.95);
-            background: rgba(0, 229, 255, 0.15);
-        }
-
-        .cmd-btn.active {
-            border-color: var(--accent);
-            background: rgba(0, 229, 255, 0.1);
-            color: var(--accent);
-            box-shadow: 0 0 15px var(--accent-glow);
-        }
-
-        .cmd-btn.wide { grid-column: span 3; }
-        .cmd-btn.half { grid-column: span 1; }
-
-        .action-buttons {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            margin-top: auto;
+        .action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.4rem;
         }
 
         .action-btn {
-            background: linear-gradient(135deg, rgba(0, 229, 255, 0.15), rgba(168, 85, 247, 0.15));
-            border: 1px solid var(--accent);
-            border-radius: 10px;
-            padding: 0.8rem;
-            color: var(--accent);
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.6rem 0.5rem;
+            color: var(--text);
             font-family: var(--font-mono);
-            font-size: 0.75rem;
+            font-size: 0.6rem;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
             text-align: center;
-            font-weight: 500;
         }
+        .action-btn:hover { border-color: var(--accent-3); color: var(--accent-3); background: rgba(168, 85, 247, 0.08); }
+        .action-btn:active { transform: scale(0.95); }
+        .action-btn.estop { border-color: var(--accent-2); color: var(--accent-2); }
+        .action-btn.estop:hover { background: rgba(255, 61, 113, 0.15); box-shadow: 0 0 15px rgba(255, 61, 113, 0.3); }
 
-        .action-btn:hover {
-            background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(168, 85, 247, 0.25));
-            box-shadow: 0 0 30px var(--accent-glow);
-            transform: translateY(-2px);
-        }
-
-        .action-btn.danger {
-            border-color: var(--accent-2);
-            color: var(--accent-2);
-            background: rgba(255, 61, 113, 0.1);
-        }
-
-        .action-btn.danger:hover {
-            background: rgba(255, 61, 113, 0.2);
-            box-shadow: 0 0 30px rgba(255, 61, 113, 0.3);
-        }
-
-        .telemetry {
-            font-family: var(--font-mono);
-            font-size: 0.65rem;
-            color: var(--text-dim);
-            margin-top: 1rem;
-            padding-top: 0.8rem;
-            border-top: 1px solid var(--border);
-            line-height: 1.8;
-        }
-
-        .telemetry .val { color: var(--accent); }
-
-        /* TEXT INPUT */
-        .text-input-container {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 0.8rem;
-        }
-
+        .text-input-row { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
         .text-input {
             flex: 1;
             background: var(--surface-2);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 0.6rem 0.8rem;
+            padding: 0.55rem 0.7rem;
             color: var(--text);
             font-family: var(--font-mono);
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             outline: none;
             transition: border-color 0.3s;
         }
-
         .text-input:focus { border-color: var(--accent); }
-
         .text-input::placeholder { color: var(--text-dim); }
-
         .send-btn {
             background: var(--accent);
             border: none;
             border-radius: 8px;
-            padding: 0.6rem 1rem;
+            padding: 0.55rem 0.8rem;
             color: var(--bg);
             font-family: var(--font-mono);
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
         }
-
         .send-btn:hover { box-shadow: 0 0 20px var(--accent-glow); }
 
-        /* FOOTER */
+        .speed-control { margin-top: 0.6rem; }
+        .speed-control label { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-dim); }
+        .speed-slider {
+            width: 100%; margin-top: 0.3rem;
+            -webkit-appearance: none; appearance: none;
+            height: 4px; background: var(--border); border-radius: 2px; outline: none;
+        }
+        .speed-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: var(--accent); cursor: pointer;
+        }
+
         footer {
             padding: 3rem 5%;
             text-align: center;
@@ -508,18 +437,15 @@
             color: var(--text-dim);
             font-size: 0.8rem;
         }
-
         footer a { color: var(--accent); text-decoration: none; }
 
-        /* RESPONSIVE */
         @media (max-width: 1024px) {
             .hero-grid { grid-template-columns: 1fr; }
-            .hero-3d { height: 400px; }
+            .hero-3d { height: 420px; }
             .features-grid { grid-template-columns: repeat(2, 1fr); }
             .playground-container { grid-template-columns: 1fr; height: auto; }
-            .playground-viewport { height: 400px; }
+            .playground-viewport { height: 420px; }
         }
-
         @media (max-width: 640px) {
             nav { padding: 1rem 1.5rem; }
             .nav-links { display: none; }
@@ -529,683 +455,1221 @@
     </style>
 </head>
 <body>
-    <div class="grain"></div>
+<div class="grain"></div>
 
-    <nav>
-        <div class="nav-brand">KANDA_</div>
-        <ul class="nav-links">
-            <li><a href="#hero">Home</a></li>
-            <li><a href="#features">Capabilities</a></li>
-            <li><a href="#playground">Playground</a></li>
-            <li><a href="https://github.com/darshacharya/KANDA" target="_blank">GitHub</a></li>
-        </ul>
-    </nav>
+<nav>
+    <div class="nav-brand">KANDA_</div>
+    <ul class="nav-links">
+        <li><a href="#hero">Home</a></li>
+        <li><a href="#features">Capabilities</a></li>
+        <li><a href="#playground">Playground</a></li>
+        <li><a href="https://github.com/darshacharya/KANDA" target="_blank">GitHub</a></li>
+    </ul>
+</nav>
 
-    <section id="hero">
-        <div class="hero-grid">
-            <div class="hero-text">
-                <h1>Meet <span>KANDA</span></h1>
-                <p>A multimodal embodied robot agent that sees, hears, speaks, and navigates autonomously — built for under $77 with a three-layer safety architecture ensuring no cloud failure can cause a collision.</p>
-                <div class="hero-stats">
-                    <div class="stat">
-                        <div class="stat-value">&lt;$77</div>
-                        <div class="stat-label">Total Cost</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value">47ms</div>
-                        <div class="stat-label">Reflex Latency</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value">0.94</div>
-                        <div class="stat-label">Intent F1</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-value">0%</div>
-                        <div class="stat-label">Unsafe Commands</div>
-                    </div>
+<section id="hero">
+    <div class="hero-grid">
+        <div class="hero-text">
+            <h1>Meet <span>KANDA</span></h1>
+            <p>A multimodal embodied robot agent with deliberative–critic–reflex safety. Voice, vision, and autonomous navigation on a Raspberry Pi + ESP32 — all for under $77.</p>
+            <div class="hero-stats">
+                <div class="stat"><div class="stat-value">&lt;$77</div><div class="stat-label">Total Cost</div></div>
+                <div class="stat"><div class="stat-value">47ms</div><div class="stat-label">Reflex Latency</div></div>
+                <div class="stat"><div class="stat-value">0.94</div><div class="stat-label">Intent F1</div></div>
+                <div class="stat"><div class="stat-value">7</div><div class="stat-label">States</div></div>
+            </div>
+        </div>
+        <div class="hero-3d" id="hero-3d-container">
+            <div class="component-labels">
+                <span class="hl">▪</span> Camera Module (Pi v2.1)<br>
+                <span class="hl">▪</span> Raspberry Pi 4B<br>
+                <span class="hl">▪</span> 3× HC-SR04 Ultrasonic<br>
+                <span class="hl">▪</span> ESP32 DevKit<br>
+                <span class="hl">▪</span> Bluetooth Speaker<br>
+                <span class="hl">▪</span> L298N Motor Driver<br>
+                <span class="hl">▪</span> 2× DC Gear Motors
+            </div>
+            <span class="interact-hint">↔ drag to rotate · scroll to zoom</span>
+        </div>
+    </div>
+</section>
+
+<section id="features">
+    <div class="section-header">
+        <span class="section-tag">// architecture</span>
+        <h2 class="section-title">Three-layer safety pipeline</h2>
+    </div>
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">🧠</div>
+            <h3>Deliberative Layer</h3>
+            <p>Groq Llama 3.3 70B classifies intent (COMMAND/QUESTION/TASK/UNKNOWN) and generates validated JSON action plans with body-context grounding.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚖️</div>
+            <h3>Critic Layer</h3>
+            <p>Pi-side validator enforces action ∈ {forward, backward, left, right, slight_left, slight_right, stop}, clamps speed [0–255], rejects unsafe plans.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Reflex Layer</h3>
+            <p>ESP32 firmware halts in 47ms when front sensor &lt; 15cm — 40× faster than cloud round-trip. Works even if Pi crashes.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔍</div>
+            <h3>ReAct Search</h3>
+            <p>Spiral pattern: 4 rotations for 360° scan → forward → rescan → turn opposite → forward. Semantic memory (SequenceMatcher > 0.7) prevents revisiting.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">👁️</div>
+            <h3>Vision + Body Context</h3>
+            <p>NVIDIA NIM VLM describes scenes. Body context injects sensors, recent actions, conversation, camera scene, and capabilities into every LLM call.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🎙️</div>
+            <h3>Wake → Act Pipeline</h3>
+            <p>"Hey Kanda" → VAD recording → Groq Whisper STT → intent classification → plan execution → gTTS response. Full cycle in 7 states.</p>
+        </div>
+    </div>
+</section>
+
+<section id="playground">
+    <div class="section-header">
+        <span class="section-tag">// simulator</span>
+        <h2 class="section-title">Virtual KANDA Playground</h2>
+    </div>
+    <div class="playground-container">
+        <div class="playground-viewport" id="playground-viewport">
+            <div class="viewport-hud" id="viewport-hud">
+                STATE: <span class="hud-state" id="hud-state">IDLE</span><br>
+                <span class="hud-dim">SPEED:</span> <span id="hud-speed">120</span> PWM<br>
+                <span class="hud-dim">FRONT:</span> <span id="hud-front">--</span>cm<br>
+                <span class="hud-dim">LEFT:</span> <span id="hud-left">--</span>cm<br>
+                <span class="hud-dim">RIGHT:</span> <span id="hud-right">--</span>cm
+            </div>
+            <div class="viewport-oled" id="viewport-oled">😴</div>
+            <div class="log-output" id="log-output"></div>
+            <div class="viewport-bottom">
+                <span>UART 115200 · 100ms loop · KANDA Simulator</span>
+                <span id="timer-display">0.0s</span>
+            </div>
+        </div>
+        <div class="playground-controls">
+            <div class="control-panel">
+                <div class="panel-title">Motor Commands</div>
+                <div class="command-grid">
+                    <div class="cmd-btn" data-cmd="slight_left">↰ SL</div>
+                    <div class="cmd-btn" data-cmd="forward">▲ FWD</div>
+                    <div class="cmd-btn" data-cmd="slight_right">↱ SR</div>
+                    <div class="cmd-btn" data-cmd="left">◄ LEFT</div>
+                    <div class="cmd-btn" data-cmd="stop">■ STOP</div>
+                    <div class="cmd-btn" data-cmd="right">► RIGHT</div>
+                    <div class="cmd-btn" data-cmd="backward" style="grid-column:2">▼ BACK</div>
+                </div>
+                <div class="speed-control">
+                    <label>Speed: <span id="speed-val">120</span>/255</label>
+                    <input type="range" class="speed-slider" id="speed-slider" min="40" max="255" value="120">
                 </div>
             </div>
-            <div class="hero-3d" id="hero-3d-container">
-                <span class="interact-hint">↔ drag to rotate · scroll to zoom</span>
-            </div>
-        </div>
-    </section>
-
-    <section id="features">
-        <div class="section-header">
-            <span class="section-tag">// capabilities</span>
-            <h2 class="section-title">What KANDA can do</h2>
-        </div>
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">🎙️</div>
-                <h3>Voice Control</h3>
-                <p>Wake with "Hey Kanda", speak naturally. Groq Llama 3.3 classifies intent and generates validated motor plans in real-time.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">👁️</div>
-                <h3>Vision Understanding</h3>
-                <p>NVIDIA NIM Llama 3.2 Vision describes scenes, identifies objects, and guides the episodic visual search algorithm.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🔍</div>
-                <h3>Object Search</h3>
-                <p>"Find my bottle" — triggers a ReAct-style search loop with semantic deduplication memory to avoid revisiting explored areas.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🛡️</div>
-                <h3>Three-Layer Safety</h3>
-                <p>Deliberative grounding + deterministic validator + firmware reflex. 42% of raw LLM outputs are unsafe — after validation, zero.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">📱</div>
-                <h3>Telegram Remote</h3>
-                <p>Send text commands, voice notes, or photos via Telegram. All paths converge at intent classification with full body context.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">⚡</div>
-                <h3>Real-time Reflex</h3>
-                <p>ESP32 firmware halts in 47ms on obstacle detection — 40× faster than cloud inference. Works even if Pi is disconnected.</p>
-            </div>
-        </div>
-    </section>
-
-    <section id="playground">
-        <div class="section-header">
-            <span class="section-tag">// virtual playground</span>
-            <h2 class="section-title">Try KANDA in your browser</h2>
-        </div>
-        <div class="playground-container">
-            <div class="playground-viewport" id="playground-viewport">
-                <div class="viewport-overlay">
-                    <span>KANDA SIMULATOR v1.0</span>
-                </div>
-                <div class="viewport-status">
-                    <div class="status-indicator">
-                        <div class="status-dot"></div>
-                        <span>STATE: <span id="state-display">IDLE</span></span>
-                    </div>
-                    <span id="sensor-display">F:∞ L:∞ R:∞</span>
+            <div class="control-panel">
+                <div class="panel-title">Task Actions</div>
+                <div class="action-grid">
+                    <div class="action-btn" data-action="find">🔍 Find Object</div>
+                    <div class="action-btn" data-action="dance">💃 Dance</div>
+                    <div class="action-btn" data-action="present">🎤 Present</div>
+                    <div class="action-btn" data-action="patrol">🔄 Patrol</div>
+                    <div class="action-btn" data-action="describe">👁️ Describe</div>
+                    <div class="action-btn estop" data-action="estop">⚠️ E-STOP</div>
                 </div>
             </div>
-            <div class="playground-controls">
-                <div class="control-panel">
-                    <div class="panel-title">Movement Controls</div>
-                    <div class="command-grid">
-                        <div class="cmd-btn" data-cmd="slight_left">↰ S.Left</div>
-                        <div class="cmd-btn" data-cmd="forward">↑ FWD</div>
-                        <div class="cmd-btn" data-cmd="slight_right">↱ S.Right</div>
-                        <div class="cmd-btn" data-cmd="left">← Left</div>
-                        <div class="cmd-btn" data-cmd="stop">■ Stop</div>
-                        <div class="cmd-btn" data-cmd="right">→ Right</div>
-                        <div class="cmd-btn" data-cmd="backward" style="grid-column: 2;">↓ Back</div>
-                    </div>
-                    <div class="panel-title" style="margin-top:0.5rem">Actions</div>
-                    <div class="action-buttons">
-                        <div class="action-btn" data-action="find">🔍 Find Object</div>
-                        <div class="action-btn" data-action="dance">💃 Dance</div>
-                        <div class="action-btn" data-action="present">🎤 Present</div>
-                        <div class="action-btn" data-action="patrol">🔄 Patrol</div>
-                        <div class="action-btn danger" data-action="estop">⚠️ Emergency Stop</div>
-                    </div>
-                    <div class="text-input-container">
-                        <input type="text" class="text-input" id="cmd-input" placeholder="Type a command...">
-                        <button class="send-btn" id="send-btn">▶</button>
-                    </div>
-                    <div class="telemetry" id="telemetry">
-                        Front: <span class="val">--</span>cm &nbsp;
-                        Left: <span class="val">--</span>cm &nbsp;
-                        Right: <span class="val">--</span>cm
-                    </div>
+            <div class="control-panel">
+                <div class="panel-title">Voice Command (Text)</div>
+                <div class="text-input-row">
+                    <input type="text" class="text-input" id="cmd-input" placeholder="&quot;find my bottle&quot; or &quot;go forward 2 seconds&quot;">
+                    <button class="send-btn" id="send-btn">▶</button>
                 </div>
             </div>
         </div>
-    </section>
+    </div>
+</section>
 
-    <footer>
-        <p>KANDA — Knowledge-driven Autonomous Navigation and Decision-making Agent<br>
-        Built by <a href="https://github.com/darshacharya" target="_blank">Sudarshan T S</a> · RV College of Engineering · 2025</p>
-    </footer>
+<footer>
+    <p>KANDA — Knowledge-driven Autonomous Navigation and Decision-making Agent<br>
+    Built by <a href="https://github.com/darshacharya" target="_blank">Sudarshan T S</a> · RV College of Engineering · 2025</p>
+</footer>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script>
-    // ============================================================
-    // HERO 3D ROBOT MODEL
-    // ============================================================
-    (function() {
-        const container = document.getElementById('hero-3d-container');
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-        camera.position.set(4, 3, 5);
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// ====================================================================
+// DETAILED 3D ROBOT MODEL (matches actual KANDA hardware)
+// ====================================================================
+(function() {
+    const container = document.getElementById('hero-3d-container');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(5, 4, 6);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
-        container.appendChild(renderer.domElement);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.insertBefore(renderer.domElement, container.firstChild);
 
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.autoRotate = true;
-        controls.autoRotateSpeed = 1.2;
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.8;
+    controls.target.set(0, 0.5, 0);
 
-        // Lighting
-        const ambient = new THREE.AmbientLight(0x404060, 0.6);
-        scene.add(ambient);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(5, 8, 5);
-        dirLight.castShadow = true;
-        scene.add(dirLight);
-        const rimLight = new THREE.DirectionalLight(0x00e5ff, 0.4);
-        rimLight.position.set(-3, 2, -4);
-        scene.add(rimLight);
+    scene.add(new THREE.AmbientLight(0x404060, 0.5));
+    const key = new THREE.DirectionalLight(0xffffff, 0.9);
+    key.position.set(4, 8, 5);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x6688cc, 0.3);
+    fill.position.set(-4, 3, -3);
+    scene.add(fill);
+    const rim = new THREE.PointLight(0x00e5ff, 0.6, 10);
+    rim.position.set(-2, 2, -3);
+    scene.add(rim);
 
-        // Ground
-        const groundGeo = new THREE.CircleGeometry(6, 64);
-        const groundMat = new THREE.MeshStandardMaterial({ color: 0x15151f, roughness: 0.9 });
-        const ground = new THREE.Mesh(groundGeo, groundMat);
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.y = -0.8;
-        ground.receiveShadow = true;
-        scene.add(ground);
+    const ground = new THREE.Mesh(
+        new THREE.CircleGeometry(5, 64),
+        new THREE.MeshStandardMaterial({ color: 0x13131d, roughness: 0.95 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.6;
+    ground.receiveShadow = true;
+    scene.add(ground);
 
-        // Grid
-        const grid = new THREE.GridHelper(12, 24, 0x2a2a3a, 0x1a1a26);
-        grid.position.y = -0.79;
-        scene.add(grid);
+    const grid = new THREE.GridHelper(10, 20, 0x252535, 0x1a1a26);
+    grid.position.y = -0.59;
+    scene.add(grid);
 
-        // KANDA Robot Model
-        const robot = new THREE.Group();
+    const robot = new THREE.Group();
 
-        // Chassis (clear acrylic plate)
-        const chassisGeo = new THREE.BoxGeometry(1.8, 0.12, 2.2);
-        const chassisMat = new THREE.MeshPhysicalMaterial({ color: 0xccddee, transparent: true, opacity: 0.4, roughness: 0.1, metalness: 0.1 });
-        const chassis = new THREE.Mesh(chassisGeo, chassisMat);
-        chassis.castShadow = true;
-        robot.add(chassis);
+    // === BOTTOM CHASSIS (clear acrylic plate) ===
+    const acrylicMat = new THREE.MeshPhysicalMaterial({
+        color: 0xddeeff, transparent: true, opacity: 0.35,
+        roughness: 0.05, metalness: 0.0, clearcoat: 1.0
+    });
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.06, 2.4), acrylicMat);
+    chassis.position.y = 0;
+    robot.add(chassis);
 
-        // Cardboard body
-        const bodyGeo = new THREE.BoxGeometry(1.6, 0.8, 1.8);
-        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xb5894e, roughness: 0.9 });
-        const body = new THREE.Mesh(bodyGeo, bodyMat);
-        body.position.y = 0.5;
-        body.castShadow = true;
-        robot.add(body);
+    // Mounting holes
+    const holeMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    [[-0.8, 0, -1.0], [0.8, 0, -1.0], [-0.8, 0, 1.0], [0.8, 0, 1.0]].forEach(p => {
+        const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.08, 8), holeMat);
+        hole.position.set(...p);
+        robot.add(hole);
+    });
 
-        // Perf board (red)
-        const perfGeo = new THREE.BoxGeometry(1.4, 0.05, 1.4);
-        const perfMat = new THREE.MeshStandardMaterial({ color: 0xcc3333 });
-        const perf = new THREE.Mesh(perfGeo, perfMat);
-        perf.position.y = 0.92;
-        robot.add(perf);
+    // === DC GEAR MOTORS (yellow gearbox motors) ===
+    const motorMat = new THREE.MeshStandardMaterial({ color: 0xddcc00, roughness: 0.6, metalness: 0.3 });
+    const motorGeo = new THREE.BoxGeometry(0.25, 0.35, 0.7);
+    [-1, 1].forEach(side => {
+        const motor = new THREE.Mesh(motorGeo, motorMat);
+        motor.position.set(side * 0.95, -0.15, 0.5);
+        motor.castShadow = true;
+        robot.add(motor);
+        const shaft = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.03, 0.03, 0.15, 8),
+            new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 })
+        );
+        shaft.rotation.z = Math.PI / 2;
+        shaft.position.set(side * 1.1, -0.15, 0.5);
+        robot.add(shaft);
+    });
 
-        // Raspberry Pi (green PCB)
-        const piGeo = new THREE.BoxGeometry(0.85, 0.12, 0.56);
-        const piMat = new THREE.MeshStandardMaterial({ color: 0x2d8f2d });
-        const pi = new THREE.Mesh(piGeo, piMat);
-        pi.position.set(0.2, 1.1, 0);
-        pi.castShadow = true;
-        robot.add(pi);
-
-        // Power bank (silver)
-        const pbGeo = new THREE.BoxGeometry(0.9, 0.25, 0.5);
-        const pbMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8, roughness: 0.2 });
-        const pb = new THREE.Mesh(pbGeo, pbMat);
-        pb.position.set(0.2, 1.35, 0);
-        robot.add(pb);
-
-        // Camera module
-        const camGeo = new THREE.BoxGeometry(0.25, 0.25, 0.08);
-        const camMat = new THREE.MeshStandardMaterial({ color: 0x1a6b1a });
-        const cam = new THREE.Mesh(camGeo, camMat);
-        cam.position.set(0, 1.7, -0.2);
-        robot.add(cam);
-        const lensGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.04, 16);
-        const lensMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9 });
-        const lens = new THREE.Mesh(lensGeo, lensMat);
-        lens.rotation.x = Math.PI / 2;
-        lens.position.set(0, 1.7, -0.25);
-        robot.add(lens);
-
-        // Ultrasonic sensors (3x HC-SR04)
-        const sensorMat = new THREE.MeshStandardMaterial({ color: 0x2266cc });
-        const cylMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.6 });
-        for (let i = -1; i <= 1; i++) {
-            const sensorBoard = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.2, 0.12), sensorMat);
-            sensorBoard.position.set(i * 0.5, 0.5, -1.05);
-            robot.add(sensorBoard);
-            for (let j = -1; j <= 1; j += 2) {
-                const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.15, 12), cylMat);
-                cyl.rotation.x = Math.PI / 2;
-                cyl.position.set(i * 0.5 + j * 0.08, 0.5, -1.13);
-                robot.add(cyl);
-            }
-        }
-
-        // Wheels (black rubber with spokes)
-        const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.2, 24);
-        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
-        const wheelL = new THREE.Mesh(wheelGeo, wheelMat);
-        wheelL.rotation.z = Math.PI / 2;
-        wheelL.position.set(-1.0, -0.3, 0.5);
-        wheelL.castShadow = true;
-        robot.add(wheelL);
-        const wheelR = wheelL.clone();
-        wheelR.position.set(1.0, -0.3, 0.5);
-        robot.add(wheelR);
-
-        // Caster wheel (front)
-        const casterGeo = new THREE.SphereGeometry(0.12, 12, 12);
-        const casterMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
-        const caster = new THREE.Mesh(casterGeo, casterMat);
-        caster.position.set(0, -0.55, -0.8);
-        robot.add(caster);
-
-        // Speaker (gold cylinder)
-        const spkGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.35, 20);
-        const spkMat = new THREE.MeshStandardMaterial({ color: 0xccaa00, metalness: 0.7, roughness: 0.3 });
-        const speaker = new THREE.Mesh(spkGeo, spkMat);
-        speaker.rotation.z = Math.PI / 2;
-        speaker.position.set(-1.1, 0.2, -0.6);
-        robot.add(speaker);
-
-        // Glow ring on sensors (accent)
-        const glowMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.6 });
-        const glowRing = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.09, 16), glowMat);
-        glowRing.rotation.x = -Math.PI / 2;
-        glowRing.position.set(0, 1.75, -0.25);
-        robot.add(glowRing);
-
-        robot.position.y = -0.1;
-        scene.add(robot);
-
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            glowRing.material.opacity = 0.4 + Math.sin(Date.now() * 0.005) * 0.3;
-            renderer.render(scene, camera);
-        }
-        animate();
-
-        window.addEventListener('resize', () => {
-            camera.aspect = container.clientWidth / container.clientHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(container.clientWidth, container.clientHeight);
-        });
-    })();
-
-    // ============================================================
-    // PLAYGROUND SIMULATOR
-    // ============================================================
-    (function() {
-        const container = document.getElementById('playground-viewport');
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0d0d14);
-        scene.fog = new THREE.Fog(0x0d0d14, 15, 30);
-
-        const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
-        camera.position.set(0, 8, 10);
-        camera.lookAt(0, 0, 0);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
-        container.appendChild(renderer.domElement);
-
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.maxPolarAngle = Math.PI / 2.2;
-
-        // Lighting
-        scene.add(new THREE.AmbientLight(0x404060, 0.5));
-        const sun = new THREE.DirectionalLight(0xffffff, 0.7);
-        sun.position.set(5, 10, 5);
-        sun.castShadow = true;
-        scene.add(sun);
-        const accent = new THREE.PointLight(0x00e5ff, 0.5, 15);
-        accent.position.set(-3, 4, -3);
-        scene.add(accent);
-
-        // Floor (lab environment)
-        const floorGeo = new THREE.PlaneGeometry(20, 20);
-        const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a24, roughness: 0.8 });
-        const floor = new THREE.Mesh(floorGeo, floorMat);
-        floor.rotation.x = -Math.PI / 2;
-        floor.receiveShadow = true;
-        scene.add(floor);
-
-        // Grid overlay
-        const gridHelper = new THREE.GridHelper(20, 40, 0x2a2a3a, 0x1a1a26);
-        gridHelper.position.y = 0.01;
-        scene.add(gridHelper);
-
-        // Walls
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e1e2a, roughness: 0.9 });
-        const wallGeo = new THREE.BoxGeometry(20, 3, 0.2);
-        const wallBack = new THREE.Mesh(wallGeo, wallMat);
-        wallBack.position.set(0, 1.5, -10);
-        scene.add(wallBack);
-        const wallLeft = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 20), wallMat);
-        wallLeft.position.set(-10, 1.5, 0);
-        scene.add(wallLeft);
-        const wallRight = wallLeft.clone();
-        wallRight.position.set(10, 1.5, 0);
-        scene.add(wallRight);
-
-        // Room objects
-        function createDesk(x, z, rot) {
-            const g = new THREE.Group();
-            const top = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 0.8), new THREE.MeshStandardMaterial({ color: 0x5c3a1e }));
-            top.position.y = 0.7;
-            top.castShadow = true;
-            g.add(top);
-            for (let i = -1; i <= 1; i += 2) {
-                for (let j = -1; j <= 1; j += 2) {
-                    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 8), new THREE.MeshStandardMaterial({ color: 0x444444 }));
-                    leg.position.set(i * 0.6, 0.35, j * 0.3);
-                    g.add(leg);
-                }
-            }
-            g.position.set(x, 0, z);
-            g.rotation.y = rot || 0;
-            scene.add(g);
-            return g;
-        }
-
-        function createChair(x, z) {
-            const g = new THREE.Group();
-            const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.5), new THREE.MeshStandardMaterial({ color: 0x333366 }));
-            seat.position.y = 0.45;
-            g.add(seat);
-            const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.06), new THREE.MeshStandardMaterial({ color: 0x333366 }));
-            back.position.set(0, 0.7, -0.22);
-            g.add(back);
-            g.position.set(x, 0, z);
-            scene.add(g);
-        }
-
-        function createObject(x, z, color, shape) {
-            let geo;
-            if (shape === 'bottle') geo = new THREE.CylinderGeometry(0.08, 0.1, 0.4, 12);
-            else if (shape === 'book') geo = new THREE.BoxGeometry(0.3, 0.04, 0.2);
-            else if (shape === 'mug') geo = new THREE.CylinderGeometry(0.07, 0.09, 0.15, 12);
-            else geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-            const mat = new THREE.MeshStandardMaterial({ color });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(x, shape === 'book' ? 0.72 : 0.9, z);
-            mesh.castShadow = true;
-            scene.add(mesh);
-            return mesh;
-        }
-
-        createDesk(-3, -4);
-        createDesk(3, -6, Math.PI / 6);
-        createDesk(-5, 2);
-        createChair(-3, -3);
-        createChair(3, -5);
-        createChair(-5, 3);
-
-        const bottle = createObject(-3, -4, 0x2299ff, 'bottle');
-        createObject(3, -6, 0xff6644, 'book');
-        createObject(-5, 2, 0xffcc00, 'mug');
-
-        // Robot in playground
-        const simBot = new THREE.Group();
-        const botBody = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.35, 0.8), new THREE.MeshStandardMaterial({ color: 0xb5894e }));
-        botBody.position.y = 0.3;
-        botBody.castShadow = true;
-        simBot.add(botBody);
-        const botTop = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.4), new THREE.MeshStandardMaterial({ color: 0x2d8f2d }));
-        botTop.position.y = 0.55;
-        simBot.add(botTop);
-        const botCam = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.05), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-        botCam.position.set(0, 0.7, -0.2);
-        simBot.add(botCam);
-
-        // Sensor beams (visualize)
-        const beamMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.15 });
-        const beamGeo = new THREE.ConeGeometry(0.3, 2, 8, 1, true);
-        const beamF = new THREE.Mesh(beamGeo, beamMat);
-        beamF.rotation.x = Math.PI / 2;
-        beamF.position.set(0, 0.3, -1.4);
-        simBot.add(beamF);
-
-        // Wheels
-        const wMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-        const wGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.1, 12);
-        const wL = new THREE.Mesh(wGeo, wMat);
-        wL.rotation.z = Math.PI / 2;
-        wL.position.set(-0.35, 0.15, 0.2);
-        simBot.add(wL);
-        const wR = wL.clone();
-        wR.position.set(0.35, 0.15, 0.2);
-        simBot.add(wR);
-
-        // Status LED
-        const ledMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
-        const led = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), ledMat);
-        led.position.set(0, 0.65, 0);
-        simBot.add(led);
-
-        simBot.position.set(0, 0, 4);
-        scene.add(simBot);
-
-        // State
-        let state = 'IDLE';
-        let velocity = { x: 0, z: 0 };
-        let rotVel = 0;
-        let targetAction = null;
-        let danceTimer = 0;
-        let searchTarget = null;
-        let patrolIndex = 0;
-        const patrolPoints = [{x: -3, z: -3}, {x: 3, z: -5}, {x: -5, z: 2}, {x: 3, z: 3}, {x: 0, z: 0}];
-
-        function setState(s) {
-            state = s;
-            document.getElementById('state-display').textContent = s;
-            ledMat.color.setHex(
-                s === 'IDLE' ? 0x00ff88 :
-                s === 'MOVING' ? 0x00e5ff :
-                s === 'SEARCHING' ? 0xffaa00 :
-                s === 'DANCING' ? 0xff00ff :
-                s === 'PRESENTING' ? 0xa855f7 :
-                s === 'PATROLLING' ? 0x00e5ff : 0xff3333
+    // === WHEELS (black rubber with spoke pattern) ===
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.85 });
+    const hubMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.4 });
+    [-1, 1].forEach(side => {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.18, 24), wheelMat);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(side * 1.15, -0.15, 0.5);
+        wheel.castShadow = true;
+        robot.add(wheel);
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.19, 16), hubMat);
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(side * 1.15, -0.15, 0.5);
+        robot.add(hub);
+        for (let i = 0; i < 5; i++) {
+            const spoke = new THREE.Mesh(
+                new THREE.BoxGeometry(0.04, 0.03, 0.22),
+                hubMat
             );
+            spoke.rotation.z = Math.PI / 2;
+            spoke.rotation.x = (i / 5) * Math.PI * 2;
+            spoke.position.set(side * 1.15, -0.15, 0.5);
+            robot.add(spoke);
         }
+    });
 
-        function updateSensors() {
-            const pos = simBot.position;
-            const front = Math.min(10 - Math.abs(pos.z - (-10)), 20);
-            const left = Math.min(pos.x - (-10), 20);
-            const right = Math.min(10 - pos.x, 20);
-            const fDist = Math.max(5, front * 10).toFixed(0);
-            const lDist = Math.max(5, left * 10).toFixed(0);
-            const rDist = Math.max(5, right * 10).toFixed(0);
-            document.getElementById('sensor-display').textContent = `F:${fDist}cm L:${lDist}cm R:${rDist}cm`;
-            document.getElementById('telemetry').innerHTML = `Front: <span class="val">${fDist}</span>cm &nbsp; Left: <span class="val">${lDist}</span>cm &nbsp; Right: <span class="val">${rDist}</span>cm`;
-            return { front: parseFloat(fDist), left: parseFloat(lDist), right: parseFloat(rDist) };
-        }
+    // === CASTER WHEEL (front, white ball) ===
+    const casterMount = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.25, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.5 })
+    );
+    casterMount.position.set(0, -0.25, -0.9);
+    robot.add(casterMount);
+    const casterBall = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.2, metalness: 0.3 })
+    );
+    casterBall.position.set(0, -0.45, -0.9);
+    robot.add(casterBall);
 
-        function moveBot(cmd) {
-            const speed = 0.04;
-            const rotSpeed = 0.03;
-            switch (cmd) {
-                case 'forward':
-                    velocity.x = -Math.sin(simBot.rotation.y) * speed;
-                    velocity.z = -Math.cos(simBot.rotation.y) * speed;
-                    setState('MOVING');
+    // === L298N MOTOR DRIVER (red PCB) ===
+    const l298n = new THREE.Mesh(
+        new THREE.BoxGeometry(0.9, 0.08, 0.7),
+        new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.7 })
+    );
+    l298n.position.set(0, 0.08, 0.3);
+    robot.add(l298n);
+    const heatsink = new THREE.Mesh(
+        new THREE.BoxGeometry(0.35, 0.2, 0.25),
+        new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8 })
+    );
+    heatsink.position.set(0, 0.2, 0.3);
+    robot.add(heatsink);
+
+    // === BATTERY PACK (purple 18650 cells) ===
+    const battMat = new THREE.MeshStandardMaterial({ color: 0x4422aa, roughness: 0.5 });
+    [-0.12, 0.12].forEach(off => {
+        const cell = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.65, 12), battMat);
+        cell.rotation.z = Math.PI / 2;
+        cell.position.set(0.7, 0.1, off + 0.8);
+        robot.add(cell);
+    });
+    const battHolder = new THREE.Mesh(
+        new THREE.BoxGeometry(0.35, 0.22, 0.35),
+        new THREE.MeshStandardMaterial({ color: 0x222222 })
+    );
+    battHolder.position.set(0.7, 0.1, 0.8);
+    robot.add(battHolder);
+
+    // === CARDBOARD BODY FRAME ===
+    const cardMat = new THREE.MeshStandardMaterial({ color: 0xb5894e, roughness: 0.95 });
+    const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 2.0), cardMat);
+    sideL.position.set(-0.85, 0.4, 0);
+    sideL.castShadow = true;
+    robot.add(sideL);
+    const sideR = sideL.clone();
+    sideR.position.x = 0.85;
+    robot.add(sideR);
+    const sideBack = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.7, 0.08), cardMat);
+    sideBack.position.set(0, 0.4, 0.95);
+    robot.add(sideBack);
+
+    // === RED PERF BOARD (sensor mounting platform) ===
+    const perfMat = new THREE.MeshStandardMaterial({ color: 0xcc3333, roughness: 0.8 });
+    const perfBoard = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.04, 1.2), perfMat);
+    perfBoard.position.set(0, 0.75, -0.2);
+    robot.add(perfBoard);
+
+    // === HC-SR04 ULTRASONIC SENSORS ×3 ===
+    const sensorPCB = new THREE.MeshStandardMaterial({ color: 0x2255bb, roughness: 0.6 });
+    const transMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.7, roughness: 0.2 });
+    const meshMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.5 });
+
+    function createUltrasonic(x, y, z, rotY) {
+        const g = new THREE.Group();
+        const board = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.2, 0.1), sensorPCB);
+        g.add(board);
+        [-0.1, 0.1].forEach(off => {
+            const trans = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.12, 16), transMat);
+            trans.rotation.x = Math.PI / 2;
+            trans.position.set(off, 0, -0.08);
+            g.add(trans);
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.01, 16), meshMat);
+            mesh.rotation.x = Math.PI / 2;
+            mesh.position.set(off, 0, -0.15);
+            g.add(mesh);
+        });
+        g.position.set(x, y, z);
+        g.rotation.y = rotY || 0;
+        return g;
+    }
+
+    robot.add(createUltrasonic(-0.5, 0.75, -0.85, 0));
+    robot.add(createUltrasonic(0, 0.75, -0.9, 0));
+    robot.add(createUltrasonic(0.5, 0.75, -0.85, 0));
+
+    // === ESP32 DevKit (blue PCB, under perf board) ===
+    const esp32 = new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 0.06, 0.28),
+        new THREE.MeshStandardMaterial({ color: 0x1133aa, roughness: 0.6 })
+    );
+    esp32.position.set(-0.3, 0.55, 0.3);
+    robot.add(esp32);
+    const usbPort = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.04, 0.06),
+        new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8 })
+    );
+    usbPort.position.set(-0.6, 0.55, 0.3);
+    robot.add(usbPort);
+
+    // === POWER BANK (silver metal case) ===
+    const powerBank = new THREE.Mesh(
+        new THREE.BoxGeometry(1.0, 0.22, 0.55),
+        new THREE.MeshStandardMaterial({ color: 0xbbbbbb, metalness: 0.85, roughness: 0.15 })
+    );
+    powerBank.position.set(0.1, 0.95, 0.15);
+    powerBank.castShadow = true;
+    robot.add(powerBank);
+
+    // === RASPBERRY PI 4B (green PCB on top) ===
+    const piBoard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.85, 0.06, 0.56),
+        new THREE.MeshStandardMaterial({ color: 0x1a7a1a, roughness: 0.6 })
+    );
+    piBoard.position.set(0.1, 1.15, 0.15);
+    piBoard.castShadow = true;
+    robot.add(piBoard);
+
+    // Pi ports (USB, Ethernet, GPIO)
+    const portMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.7 });
+    const usb1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.12), portMat);
+    usb1.position.set(0.5, 1.2, 0.3);
+    robot.add(usb1);
+    const usb2 = usb1.clone();
+    usb2.position.z = 0.15;
+    robot.add(usb2);
+    const eth = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.12), portMat);
+    eth.position.set(0.5, 1.22, 0.0);
+    robot.add(eth);
+    const gpio = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, 0.06, 0.04),
+        new THREE.MeshStandardMaterial({ color: 0x222222 })
+    );
+    gpio.position.set(0.1, 1.2, -0.1);
+    robot.add(gpio);
+
+    // === CAMERA MODULE (Pi Camera v2.1 on ribbon cable) ===
+    const camBoard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.25, 0.25, 0.05),
+        new THREE.MeshStandardMaterial({ color: 0x1a6b1a, roughness: 0.6 })
+    );
+    camBoard.position.set(0.1, 1.55, -0.1);
+    robot.add(camBoard);
+    const camLens = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.06, 0.07, 0.08, 12),
+        new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9 })
+    );
+    camLens.rotation.x = Math.PI / 2;
+    camLens.position.set(0.1, 1.55, -0.15);
+    robot.add(camLens);
+    const ribbon = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.3, 0.01),
+        new THREE.MeshStandardMaterial({ color: 0xeeeedd, roughness: 0.9 })
+    );
+    ribbon.position.set(0.1, 1.35, -0.05);
+    robot.add(ribbon);
+
+    // === OLED DISPLAY (small blue/white screen) ===
+    const oledFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(0.35, 0.2, 0.04),
+        new THREE.MeshStandardMaterial({ color: 0x111111 })
+    );
+    oledFrame.position.set(0, 0.65, -0.9);
+    robot.add(oledFrame);
+    const oledScreen = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.28, 0.14),
+        new THREE.MeshBasicMaterial({ color: 0x001133 })
+    );
+    oledScreen.position.set(0, 0.65, -0.92);
+    robot.add(oledScreen);
+
+    // === BLUETOOTH SPEAKER (gold cylinder) ===
+    const speakerBody = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.25, 0.25, 0.4, 24),
+        new THREE.MeshStandardMaterial({ color: 0xccaa00, metalness: 0.75, roughness: 0.25 })
+    );
+    speakerBody.rotation.z = Math.PI / 2;
+    speakerBody.position.set(-1.2, 0.35, -0.5);
+    speakerBody.castShadow = true;
+    robot.add(speakerBody);
+    const speakerGrill = new THREE.Mesh(
+        new THREE.CircleGeometry(0.23, 24),
+        new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.5 })
+    );
+    speakerGrill.rotation.y = Math.PI / 2;
+    speakerGrill.position.set(-1.41, 0.35, -0.5);
+    robot.add(speakerGrill);
+
+    // === WIRING (simplified colored lines) ===
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0xcc0000 });
+    const wire2Mat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const wire3Mat = new THREE.MeshBasicMaterial({ color: 0xeeee00 });
+
+    function addWire(points, mat) {
+        const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p)));
+        const geo = new THREE.TubeGeometry(curve, 12, 0.015, 6, false);
+        robot.add(new THREE.Mesh(geo, mat));
+    }
+    addWire([[0.1, 1.18, -0.08], [0.1, 1.4, -0.08], [0.1, 1.45, -0.1]], wire3Mat);
+    addWire([[-0.3, 0.58, 0.3], [-0.3, 0.72, 0.1], [0, 0.75, -0.3]], wireMat);
+    addWire([[0.5, 1.18, 0.15], [0.7, 1.0, 0.4], [0.7, 0.12, 0.5]], wire2Mat);
+
+    // === ACCENT GLOW (camera indicator LED) ===
+    const ledGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.03, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+    );
+    ledGlow.position.set(0.2, 1.55, -0.1);
+    robot.add(ledGlow);
+
+    robot.position.y = -0.1;
+    robot.rotation.y = Math.PI * 0.1;
+    scene.add(robot);
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        ledGlow.material.color.setHex(
+            Math.sin(Date.now() * 0.003) > 0 ? 0x00ff00 : 0x002200
+        );
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+})();
+
+// ====================================================================
+// PLAYGROUND SIMULATOR — Accurate KANDA behavior model
+// ====================================================================
+(function() {
+    const container = document.getElementById('playground-viewport');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d0d14);
+    scene.fog = new THREE.Fog(0x0d0d14, 18, 35);
+
+    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(0, 9, 12);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.insertBefore(renderer.domElement, container.querySelector('.viewport-hud'));
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.maxPolarAngle = Math.PI / 2.1;
+
+    scene.add(new THREE.AmbientLight(0x404060, 0.4));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+    sun.position.set(5, 12, 5); sun.castShadow = true;
+    scene.add(sun);
+    scene.add(new THREE.PointLight(0x00e5ff, 0.3, 15));
+
+    // Floor
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(20, 20),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a24, roughness: 0.85 })
+    );
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+    scene.add(floor);
+    const gridH = new THREE.GridHelper(20, 40, 0x2a2a3a, 0x1a1a26);
+    gridH.position.y = 0.01;
+    scene.add(gridH);
+
+    // Walls
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e1e2a });
+    [
+        [0, 1.5, -10, 20, 3, 0.2],
+        [-10, 1.5, 0, 0.2, 3, 20],
+        [10, 1.5, 0, 0.2, 3, 20],
+        [0, 1.5, 10, 20, 3, 0.2]
+    ].forEach(([x, y, z, w, h, d]) => {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+        wall.position.set(x, y, z);
+        scene.add(wall);
+    });
+
+    // Room objects (obstacles for ultrasonic)
+    const obstacles = [];
+    function addObstacle(x, z, w, d, h, color) {
+        const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(w, h, d),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
+        );
+        mesh.position.set(x, h / 2, z);
+        mesh.castShadow = true;
+        scene.add(mesh);
+        obstacles.push({ x, z, w: w / 2, d: d / 2, mesh });
+        return mesh;
+    }
+
+    addObstacle(-4, -5, 2, 1, 0.8, 0x5c3a1e);
+    addObstacle(4, -6, 1.5, 1, 0.8, 0x5c3a1e);
+    addObstacle(-6, 3, 1, 1.5, 0.8, 0x5c3a1e);
+    addObstacle(5, 3, 1, 2, 0.7, 0x333366);
+    addObstacle(0, -8, 3, 0.5, 1.2, 0x444444);
+
+    // Target objects (findable)
+    const targetObjects = [];
+    function addTarget(x, z, color, label) {
+        const mesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.12, 0.14, 0.4, 12),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.2 })
+        );
+        mesh.position.set(x, 0.6 + 0.2, z);
+        mesh.castShadow = true;
+        scene.add(mesh);
+        targetObjects.push({ mesh, label, x, z });
+
+        const glow = new THREE.Mesh(
+            new THREE.RingGeometry(0.2, 0.3, 16),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3 })
+        );
+        glow.rotation.x = -Math.PI / 2;
+        glow.position.set(x, 0.02, z);
+        scene.add(glow);
+        return mesh;
+    }
+
+    addTarget(-4, -5, 0x2299ff, 'bottle');
+    addTarget(4, -6, 0xff6644, 'cup');
+    addTarget(-6, 3, 0xffcc00, 'mug');
+
+    // === SIMULATED KANDA ROBOT ===
+    const bot = new THREE.Group();
+
+    const botChassis = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.04, 1.0),
+        new THREE.MeshPhysicalMaterial({ color: 0xddeeff, transparent: true, opacity: 0.3, roughness: 0.05 })
+    );
+    bot.add(botChassis);
+
+    const botBody = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 0.3, 0.8),
+        new THREE.MeshStandardMaterial({ color: 0xb5894e, roughness: 0.9 })
+    );
+    botBody.position.y = 0.2;
+    botBody.castShadow = true;
+    bot.add(botBody);
+
+    const botPerf = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, 0.02, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0xcc3333 })
+    );
+    botPerf.position.y = 0.37;
+    bot.add(botPerf);
+
+    const botPi = new THREE.Mesh(
+        new THREE.BoxGeometry(0.35, 0.04, 0.22),
+        new THREE.MeshStandardMaterial({ color: 0x1a7a1a })
+    );
+    botPi.position.set(0, 0.45, 0);
+    bot.add(botPi);
+
+    const botCam = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.1, 0.04),
+        new THREE.MeshStandardMaterial({ color: 0x1a6b1a })
+    );
+    botCam.position.set(0, 0.58, -0.15);
+    bot.add(botCam);
+
+    // Sensors
+    const sBeam = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.12 });
+    [-0.2, 0, 0.2].forEach(x => {
+        const s = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.08, 0.04),
+            new THREE.MeshStandardMaterial({ color: 0x2255bb }));
+        s.position.set(x, 0.3, -0.52);
+        bot.add(s);
+    });
+    const beamF = new THREE.Mesh(new THREE.ConeGeometry(0.4, 2.5, 8, 1, true), sBeam);
+    beamF.rotation.x = Math.PI / 2;
+    beamF.position.set(0, 0.3, -1.8);
+    bot.add(beamF);
+    const beamL = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.5, 6, 1, true), sBeam.clone());
+    beamL.rotation.z = -Math.PI / 2;
+    beamL.position.set(-1.2, 0.3, -0.2);
+    bot.add(beamL);
+    const beamR = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.5, 6, 1, true), sBeam.clone());
+    beamR.rotation.z = Math.PI / 2;
+    beamR.position.set(1.2, 0.3, -0.2);
+    bot.add(beamR);
+
+    // Wheels
+    [-1, 1].forEach(s => {
+        const w = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.17, 0.17, 0.08, 16),
+            new THREE.MeshStandardMaterial({ color: 0x1a1a1a })
+        );
+        w.rotation.z = Math.PI / 2;
+        w.position.set(s * 0.45, -0.05, 0.2);
+        bot.add(w);
+    });
+    const caster = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xdddddd })
+    );
+    caster.position.set(0, -0.12, -0.4);
+    bot.add(caster);
+
+    // Speaker
+    const spk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.1, 0.18, 12),
+        new THREE.MeshStandardMaterial({ color: 0xccaa00, metalness: 0.7 })
+    );
+    spk.rotation.z = Math.PI / 2;
+    spk.position.set(-0.5, 0.15, -0.3);
+    bot.add(spk);
+
+    // State LED
+    const stateLed = new THREE.Mesh(
+        new THREE.SphereGeometry(0.04, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x00ff88 })
+    );
+    stateLed.position.set(0, 0.52, 0);
+    bot.add(stateLed);
+
+    bot.position.set(0, 0.2, 5);
+    scene.add(bot);
+
+    // ==== STATE MACHINE (mirrors real KANDA) ====
+    const STATES = {
+        IDLE: 'IDLE', LISTENING: 'LISTENING', THINKING: 'THINKING',
+        ACTING: 'ACTING', SEARCHING: 'SEARCHING', SPEAKING: 'SPEAKING',
+        REPORTING: 'REPORTING'
+    };
+
+    const OLED_FACES = {
+        IDLE: '😴', LISTENING: '👂', THINKING: '🤔',
+        ACTING: '🤖', SEARCHING: '🔍', SPEAKING: '🗣️',
+        REPORTING: '📋', OBSTACLE: '⚠️'
+    };
+
+    const LED_COLORS = {
+        IDLE: 0x00ff88, LISTENING: 0xffaa00, THINKING: 0xa855f7,
+        ACTING: 0x00e5ff, SEARCHING: 0xffaa00, SPEAKING: 0x00e5ff,
+        REPORTING: 0x00ff88, OBSTACLE: 0xff3333
+    };
+
+    const SPEED_NORMAL = 120;
+    const SPEED_TURN = 100;
+    const OBSTACLE_DIST = 15;
+    const SEARCH_MAX_STEPS = 20;
+
+    let state = STATES.IDLE;
+    let speed = SPEED_NORMAL;
+    let actionQueue = [];
+    let actionTimer = 0;
+    let currentAction = null;
+    let cancelFlag = false;
+    let searchState = null;
+    let timerElapsed = 0;
+
+    const logEl = document.getElementById('log-output');
+    function log(msg, cls) {
+        const line = document.createElement('div');
+        line.className = 'log-line';
+        line.innerHTML = `<span class="${cls || ''}">[${(timerElapsed/1000).toFixed(1)}s]</span> ${msg}`;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+        if (logEl.children.length > 30) logEl.removeChild(logEl.firstChild);
+    }
+
+    function setState(s) {
+        state = s;
+        document.getElementById('hud-state').textContent = s;
+        document.getElementById('viewport-oled').textContent = OLED_FACES[s] || '😴';
+        stateLed.material.color.setHex(LED_COLORS[s] || 0x00ff88);
+        document.getElementById('hud-state').style.color =
+            s === 'IDLE' ? '#00ff88' :
+            s === 'SEARCHING' ? '#ffaa00' :
+            s === 'ACTING' ? '#00e5ff' :
+            s === 'THINKING' ? '#a855f7' : '#00ff88';
+    }
+
+    // Ultrasonic simulation (raycast-like distance)
+    function getSensorDist(dir) {
+        const pos = bot.position;
+        const angle = bot.rotation.y;
+        let dx, dz;
+        if (dir === 'front') { dx = -Math.sin(angle); dz = -Math.cos(angle); }
+        else if (dir === 'left') { dx = -Math.cos(angle); dz = Math.sin(angle); }
+        else { dx = Math.cos(angle); dz = -Math.sin(angle); }
+
+        let minDist = 999;
+        // Walls
+        for (let t = 0.1; t < 4; t += 0.1) {
+            const px = pos.x + dx * t;
+            const pz = pos.z + dz * t;
+            if (Math.abs(px) > 9.8 || Math.abs(pz) > 9.8) { minDist = Math.min(minDist, t * 100); break; }
+            for (const obs of obstacles) {
+                if (Math.abs(px - obs.x) < obs.w + 0.3 && Math.abs(pz - obs.z) < obs.d + 0.3) {
+                    minDist = Math.min(minDist, t * 100);
                     break;
-                case 'backward':
-                    velocity.x = Math.sin(simBot.rotation.y) * speed;
-                    velocity.z = Math.cos(simBot.rotation.y) * speed;
-                    setState('MOVING');
-                    break;
-                case 'left': rotVel = rotSpeed; setState('MOVING'); break;
-                case 'right': rotVel = -rotSpeed; setState('MOVING'); break;
-                case 'slight_left': rotVel = rotSpeed * 0.5; velocity.x = -Math.sin(simBot.rotation.y) * speed * 0.5; velocity.z = -Math.cos(simBot.rotation.y) * speed * 0.5; setState('MOVING'); break;
-                case 'slight_right': rotVel = -rotSpeed * 0.5; velocity.x = -Math.sin(simBot.rotation.y) * speed * 0.5; velocity.z = -Math.cos(simBot.rotation.y) * speed * 0.5; setState('MOVING'); break;
-                case 'stop': velocity = {x:0, z:0}; rotVel = 0; setState('IDLE'); break;
+                }
             }
+            if (minDist < 900) break;
         }
+        return Math.round(Math.min(minDist, 400));
+    }
 
-        function startDance() {
-            setState('DANCING');
-            danceTimer = 300;
+    function updateHUD() {
+        const f = getSensorDist('front');
+        const l = getSensorDist('left');
+        const r = getSensorDist('right');
+        document.getElementById('hud-front').textContent = f;
+        document.getElementById('hud-left').textContent = l;
+        document.getElementById('hud-right').textContent = r;
+        document.getElementById('hud-speed').textContent = speed;
+        return { front: f, left: l, right: r };
+    }
+
+    // Duration-based movement (like real KANDA)
+    function executeAction(action, durationMs, spd) {
+        currentAction = action;
+        actionTimer = durationMs;
+        speed = spd || SPEED_NORMAL;
+        setState(STATES.ACTING);
+        log(`UART TX: {"action":"${action}","speed":${speed}}`, 'log-accent');
+    }
+
+    function stopMotors() {
+        currentAction = null;
+        actionTimer = 0;
+        log('UART TX: {"action":"stop","speed":0}', 'log-accent');
+    }
+
+    // Real KANDA dance choreography
+    const DANCE_MOVES = [
+        ['right', 300], ['left', 300], ['right', 300], ['left', 300],
+        ['forward', 300], ['backward', 300], ['forward', 300], ['backward', 300],
+        ['right', 500], ['right', 500], ['left', 500], ['left', 500],
+        ['forward', 200], ['backward', 200], ['right', 400], ['left', 400],
+    ];
+
+    // ReAct search pattern (from task_agent.py)
+    const SEARCH_PATTERN = [
+        'right', 'right', 'right', 'right',
+        'forward',
+        'right', 'right', 'right', 'right',
+        'forward',
+        'left', 'left', 'left', 'left',
+        'forward',
+    ];
+
+    function startTask(task) {
+        cancelFlag = false;
+        setState(STATES.THINKING);
+        log(`Intent: TASK — "${task}"`, 'log-accent');
+
+        setTimeout(() => {
+            if (cancelFlag) return;
+            if (task.includes('dance')) {
+                log('Executing hardcoded dance routine (16 moves)', '');
+                actionQueue = DANCE_MOVES.map(([a, d]) => ({ action: a, duration: d, speed: SPEED_TURN }));
+                setState(STATES.ACTING);
+                processQueue();
+            } else if (task.includes('find') || task.includes('search')) {
+                log('Starting ReAct search loop...', 'log-warn');
+                startSearch(task);
+            } else if (task.includes('present') || task.includes('demo')) {
+                log('Presentation mode: slow rotation', '');
+                actionQueue = [
+                    {action: 'right', duration: 800, speed: 80},
+                    {action: 'right', duration: 800, speed: 80},
+                    {action: 'right', duration: 800, speed: 80},
+                    {action: 'right', duration: 800, speed: 80},
+                ];
+                setState(STATES.ACTING);
+                processQueue();
+            } else if (task.includes('patrol')) {
+                log('Patrol: visiting waypoints', '');
+                startPatrol();
+            } else {
+                log(`Plan: forward 600ms → right 400ms → forward 600ms`, '');
+                actionQueue = [
+                    {action: 'forward', duration: 600, speed: SPEED_NORMAL},
+                    {action: 'right', duration: 400, speed: SPEED_TURN},
+                    {action: 'forward', duration: 600, speed: SPEED_NORMAL},
+                ];
+                setState(STATES.ACTING);
+                processQueue();
+            }
+        }, 800);
+    }
+
+    function processQueue() {
+        if (cancelFlag || actionQueue.length === 0) {
+            stopMotors();
+            if (!cancelFlag) {
+                setState(STATES.REPORTING);
+                log('Task complete.', 'log-accent');
+                setTimeout(() => setState(STATES.IDLE), 1000);
+            }
+            return;
         }
+        const next = actionQueue.shift();
+        executeAction(next.action, next.duration, next.speed);
+    }
 
-        function startSearch() {
-            setState('SEARCHING');
-            searchTarget = bottle.position.clone();
-        }
+    // Search with actual spiral pattern
+    function startSearch(query) {
+        setState(STATES.SEARCHING);
+        searchState = { step: 0, patternIdx: 0, found: false, memory: [] };
 
-        function startPresent() {
-            setState('PRESENTING');
-            danceTimer = 200;
-        }
-
-        function startPatrol() {
-            setState('PATROLLING');
-            patrolIndex = 0;
-        }
-
-        // Animate
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-
-            // Apply movement
-            simBot.position.x += velocity.x;
-            simBot.position.z += velocity.z;
-            simBot.rotation.y += rotVel;
-
-            // Damping
-            velocity.x *= 0.95;
-            velocity.z *= 0.95;
-            rotVel *= 0.95;
-            if (Math.abs(velocity.x) < 0.001 && Math.abs(velocity.z) < 0.001 && Math.abs(rotVel) < 0.001 && state === 'MOVING') {
-                setState('IDLE');
+        function searchStep() {
+            if (cancelFlag || searchState.step >= SEARCH_MAX_STEPS) {
+                if (!searchState.found) {
+                    log(cancelFlag ? 'Search cancelled.' : 'Search exhausted (20 steps).', 'log-warn');
+                    setState(STATES.REPORTING);
+                    setTimeout(() => setState(STATES.IDLE), 1000);
+                }
+                return;
             }
 
-            // Bounds
-            simBot.position.x = Math.max(-9.5, Math.min(9.5, simBot.position.x));
-            simBot.position.z = Math.max(-9.5, Math.min(9.5, simBot.position.z));
-
-            // Dance
-            if (state === 'DANCING') {
-                danceTimer--;
-                simBot.rotation.y += 0.08;
-                simBot.position.y = 0.1 * Math.sin(danceTimer * 0.15);
-                if (danceTimer <= 0) { simBot.position.y = 0; setState('IDLE'); }
-            }
-
-            // Present (slow spin + bob)
-            if (state === 'PRESENTING') {
-                danceTimer--;
-                simBot.rotation.y += 0.02;
-                if (danceTimer <= 0) setState('IDLE');
-            }
-
-            // Search
-            if (state === 'SEARCHING' && searchTarget) {
-                const dx = searchTarget.x - simBot.position.x;
-                const dz = searchTarget.z - simBot.position.z;
-                const dist = Math.sqrt(dx * dx + dz * dz);
-                if (dist < 0.5) {
-                    setState('IDLE');
-                    searchTarget = null;
-                } else {
-                    const angle = Math.atan2(-dx, -dz);
-                    simBot.rotation.y += (angle - simBot.rotation.y) * 0.05;
-                    simBot.position.x += dx * 0.01;
-                    simBot.position.z += dz * 0.01;
+            // Check if near any target
+            for (const t of targetObjects) {
+                const dx = bot.position.x - t.x;
+                const dz = bot.position.z - t.z;
+                if (Math.sqrt(dx * dx + dz * dz) < 1.5) {
+                    searchState.found = true;
+                    log(`VLM: "${t.label}" detected! Object found.`, 'log-accent');
+                    stopMotors();
+                    setState(STATES.REPORTING);
+                    setTimeout(() => {
+                        log('Speaking: "I found it!"', '');
+                        setState(STATES.SPEAKING);
+                        setTimeout(() => setState(STATES.IDLE), 1500);
+                    }, 500);
+                    return;
                 }
             }
 
-            // Patrol
-            if (state === 'PATROLLING') {
-                const target = patrolPoints[patrolIndex];
-                const dx = target.x - simBot.position.x;
-                const dz = target.z - simBot.position.z;
-                const dist = Math.sqrt(dx * dx + dz * dz);
-                if (dist < 0.5) {
-                    patrolIndex = (patrolIndex + 1) % patrolPoints.length;
-                } else {
-                    const angle = Math.atan2(-dx, -dz);
-                    simBot.rotation.y += (angle - simBot.rotation.y) * 0.05;
-                    simBot.position.x += dx * 0.015;
-                    simBot.position.z += dz * 0.015;
-                }
+            const sensors = updateHUD();
+
+            // Obstacle check during search
+            if (sensors.front < 18) {
+                log(`Front blocked (${sensors.front}cm). Turning toward clearer side.`, 'log-warn');
+                const turnDir = sensors.left > sensors.right ? 'left' : 'right';
+                executeAction(turnDir, 400, SPEED_TURN);
+                searchState.step++;
+                setTimeout(searchStep, 500);
+                return;
             }
 
-            // Sensor beam pulse
-            beamF.material.opacity = 0.1 + Math.sin(Date.now() * 0.003) * 0.05;
+            const pattern = SEARCH_PATTERN[searchState.patternIdx % SEARCH_PATTERN.length];
+            searchState.patternIdx++;
+            searchState.step++;
 
-            updateSensors();
-            renderer.render(scene, camera);
-        }
-        animate();
+            const dur = pattern === 'forward' ? 600 : 400;
+            const spd = pattern === 'forward' ? SPEED_NORMAL : SPEED_TURN;
 
-        // Controls
-        document.querySelectorAll('.cmd-btn').forEach(btn => {
-            btn.addEventListener('mousedown', () => {
-                const cmd = btn.dataset.cmd;
-                moveBot(cmd);
-                btn.classList.add('active');
-            });
-            btn.addEventListener('mouseup', () => btn.classList.remove('active'));
-            btn.addEventListener('mouseleave', () => btn.classList.remove('active'));
-        });
+            log(`Search step ${searchState.step}: ${pattern} ${dur}ms @${spd}`, '');
+            executeAction(pattern, dur, spd);
 
-        document.querySelectorAll('.action-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const action = btn.dataset.action;
-                if (action === 'find') startSearch();
-                else if (action === 'dance') startDance();
-                else if (action === 'present') startPresent();
-                else if (action === 'patrol') startPatrol();
-                else if (action === 'estop') { velocity = {x:0,z:0}; rotVel = 0; danceTimer = 0; searchTarget = null; simBot.position.y = 0; setState('IDLE'); }
-            });
-        });
-
-        // Text input
-        document.getElementById('send-btn').addEventListener('click', processInput);
-        document.getElementById('cmd-input').addEventListener('keydown', e => { if (e.key === 'Enter') processInput(); });
-
-        function processInput() {
-            const input = document.getElementById('cmd-input');
-            const text = input.value.trim().toLowerCase();
-            input.value = '';
-            if (!text) return;
-            if (text.includes('forward') || text.includes('fwd')) moveBot('forward');
-            else if (text.includes('back')) moveBot('backward');
-            else if (text.includes('left')) moveBot('left');
-            else if (text.includes('right')) moveBot('right');
-            else if (text.includes('stop')) moveBot('stop');
-            else if (text.includes('find') || text.includes('search')) startSearch();
-            else if (text.includes('dance')) startDance();
-            else if (text.includes('present') || text.includes('demo')) startPresent();
-            else if (text.includes('patrol')) startPatrol();
+            setTimeout(searchStep, dur + 200);
         }
 
-        // Keyboard controls
-        document.addEventListener('keydown', e => {
-            if (document.activeElement === document.getElementById('cmd-input')) return;
-            if (e.key === 'ArrowUp' || e.key === 'w') moveBot('forward');
-            else if (e.key === 'ArrowDown' || e.key === 's') moveBot('backward');
-            else if (e.key === 'ArrowLeft' || e.key === 'a') moveBot('left');
-            else if (e.key === 'ArrowRight' || e.key === 'd') moveBot('right');
-            else if (e.key === ' ') { e.preventDefault(); moveBot('stop'); }
-        });
+        log('Capture → VLM describe → memory check → move', '');
+        setTimeout(searchStep, 500);
+    }
 
-        window.addEventListener('resize', () => {
-            camera.aspect = container.clientWidth / container.clientHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(container.clientWidth, container.clientHeight);
+    // Patrol waypoints
+    function startPatrol() {
+        setState(STATES.ACTING);
+        const waypoints = [{x:-4,z:-4}, {x:4,z:-5}, {x:-5,z:3}, {x:4,z:4}, {x:0,z:0}];
+        let wpIdx = 0;
+
+        function goToNext() {
+            if (cancelFlag || wpIdx >= waypoints.length) {
+                stopMotors();
+                setState(STATES.REPORTING);
+                log('Patrol complete.', 'log-accent');
+                setTimeout(() => setState(STATES.IDLE), 1000);
+                return;
+            }
+            const target = waypoints[wpIdx];
+            log(`Patrol → waypoint ${wpIdx + 1} (${target.x}, ${target.z})`, '');
+            navigateTo(target.x, target.z, () => {
+                wpIdx++;
+                setTimeout(goToNext, 300);
+            });
+        }
+        goToNext();
+    }
+
+    function navigateTo(tx, tz, callback) {
+        function step() {
+            if (cancelFlag) return;
+            const dx = tx - bot.position.x;
+            const dz = tz - bot.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist < 0.8) { stopMotors(); callback(); return; }
+
+            const targetAngle = Math.atan2(-dx, -dz);
+            let angleDiff = targetAngle - bot.rotation.y;
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+            if (Math.abs(angleDiff) > 0.3) {
+                currentAction = angleDiff > 0 ? 'left' : 'right';
+                actionTimer = 100;
+            } else {
+                currentAction = 'forward';
+                actionTimer = 100;
+            }
+            setTimeout(step, 120);
+        }
+        step();
+    }
+
+    // Command handling (mimics intent classification)
+    function handleCommand(text) {
+        text = text.toLowerCase().trim();
+        if (!text) return;
+
+        // Stop words
+        if (['stop', 'halt', 'cancel', 'abort'].some(w => text.includes(w))) {
+            cancelFlag = true;
+            stopMotors();
+            setState(STATES.IDLE);
+            log('Cancel event set. Motors stopped.', 'log-warn');
+            return;
+        }
+
+        // Direct motor commands
+        const directCmds = ['forward', 'backward', 'left', 'right', 'slight_left', 'slight_right'];
+        const matchedCmd = directCmds.find(c => text.includes(c.replace('_', ' ')) || text.includes(c));
+        if (matchedCmd || text.includes('fwd') || text.includes('back')) {
+            const cmd = text.includes('fwd') ? 'forward' : text.includes('back') ? 'backward' : matchedCmd;
+
+            // Parse duration
+            let duration = 500;
+            const durMatch = text.match(/(\d+)\s*(s|sec|second)/);
+            if (durMatch) duration = parseInt(durMatch[1]) * 1000;
+
+            setState(STATES.THINKING);
+            log(`Intent: COMMAND — "${cmd}" for ${duration}ms`, 'log-accent');
+            setTimeout(() => {
+                setState(STATES.SPEAKING);
+                log(`Speaking: "Moving ${cmd}"`, '');
+                setTimeout(() => {
+                    executeAction(cmd, duration, speed);
+                    setTimeout(() => {
+                        stopMotors();
+                        setState(STATES.IDLE);
+                    }, duration);
+                }, 300);
+            }, 400);
+            return;
+        }
+
+        // Tasks
+        if (['find', 'search', 'dance', 'present', 'demo', 'patrol'].some(w => text.includes(w))) {
+            startTask(text);
+            return;
+        }
+
+        // Question
+        if (text.includes('?') || text.startsWith('what') || text.startsWith('who') || text.startsWith('where')) {
+            setState(STATES.THINKING);
+            log('Intent: QUESTION', 'log-accent');
+            setTimeout(() => {
+                setState(STATES.SPEAKING);
+                log('Speaking: "I can see a room with desks and objects."', '');
+                setTimeout(() => setState(STATES.IDLE), 2000);
+            }, 600);
+            return;
+        }
+
+        startTask(text);
+    }
+
+    // Physics update (100ms loop like real firmware)
+    const LOOP_MS = 16;
+    const TURN_RATE = 0.045;
+    const MOVE_RATE = 0.025;
+
+    function physicsUpdate(dt) {
+        timerElapsed += dt;
+        document.getElementById('timer-display').textContent = (timerElapsed / 1000).toFixed(1) + 's';
+
+        if (!currentAction || actionTimer <= 0) return;
+        actionTimer -= dt;
+
+        const speedFactor = speed / 255;
+
+        // Firmware reflex: front < 15cm while moving forward
+        if (currentAction === 'forward') {
+            const frontDist = getSensorDist('front');
+            if (frontDist < OBSTACLE_DIST) {
+                log(`⚠️ FIRMWARE REFLEX: front=${frontDist}cm < 15cm. E-STOP!`, 'log-warn');
+                currentAction = null;
+                actionTimer = 0;
+                cancelFlag = true;
+                document.getElementById('viewport-oled').textContent = OLED_FACES.OBSTACLE;
+                stateLed.material.color.setHex(0xff3333);
+                setTimeout(() => {
+                    cancelFlag = false;
+                    setState(STATES.IDLE);
+                }, 1500);
+                return;
+            }
+        }
+
+        switch (currentAction) {
+            case 'forward':
+                bot.position.x -= Math.sin(bot.rotation.y) * MOVE_RATE * speedFactor;
+                bot.position.z -= Math.cos(bot.rotation.y) * MOVE_RATE * speedFactor;
+                break;
+            case 'backward':
+                bot.position.x += Math.sin(bot.rotation.y) * MOVE_RATE * speedFactor;
+                bot.position.z += Math.cos(bot.rotation.y) * MOVE_RATE * speedFactor;
+                break;
+            case 'left':
+                bot.rotation.y += TURN_RATE * speedFactor;
+                break;
+            case 'right':
+                bot.rotation.y -= TURN_RATE * speedFactor;
+                break;
+            case 'slight_left':
+                bot.rotation.y += TURN_RATE * 0.5 * speedFactor;
+                bot.position.x -= Math.sin(bot.rotation.y) * MOVE_RATE * 0.5 * speedFactor;
+                bot.position.z -= Math.cos(bot.rotation.y) * MOVE_RATE * 0.5 * speedFactor;
+                break;
+            case 'slight_right':
+                bot.rotation.y -= TURN_RATE * 0.5 * speedFactor;
+                bot.position.x -= Math.sin(bot.rotation.y) * MOVE_RATE * 0.5 * speedFactor;
+                bot.position.z -= Math.cos(bot.rotation.y) * MOVE_RATE * 0.5 * speedFactor;
+                break;
+        }
+
+        // Bounds
+        bot.position.x = Math.max(-9.3, Math.min(9.3, bot.position.x));
+        bot.position.z = Math.max(-9.3, Math.min(9.3, bot.position.z));
+
+        if (actionTimer <= 0 && state === STATES.ACTING && actionQueue.length > 0) {
+            processQueue();
+        }
+    }
+
+    let lastTime = performance.now();
+    function animate() {
+        requestAnimationFrame(animate);
+        const now = performance.now();
+        const dt = now - lastTime;
+        lastTime = now;
+
+        controls.update();
+        physicsUpdate(dt);
+        updateHUD();
+
+        // Sensor beam animation
+        beamF.material.opacity = 0.08 + Math.sin(Date.now() * 0.004) * 0.04;
+        beamL.material.opacity = 0.06 + Math.sin(Date.now() * 0.003) * 0.03;
+        beamR.material.opacity = 0.06 + Math.sin(Date.now() * 0.003 + 1) * 0.03;
+
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    // UI event handlers
+    document.querySelectorAll('.cmd-btn').forEach(btn => {
+        let interval;
+        btn.addEventListener('mousedown', () => {
+            const cmd = btn.dataset.cmd;
+            if (cmd === 'stop') { handleCommand('stop'); return; }
+            cancelFlag = false;
+            executeAction(cmd, 99999, speed);
+            setState(STATES.ACTING);
+            btn.classList.add('active');
         });
-    })();
-    </script>
+        btn.addEventListener('mouseup', () => {
+            if (btn.dataset.cmd !== 'stop') { stopMotors(); setState(STATES.IDLE); }
+            btn.classList.remove('active');
+        });
+        btn.addEventListener('mouseleave', () => {
+            btn.classList.remove('active');
+        });
+    });
+
+    document.querySelectorAll('.action-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const action = btn.dataset.action;
+            if (action === 'estop') {
+                cancelFlag = true;
+                stopMotors();
+                actionQueue = [];
+                setState(STATES.IDLE);
+                log('⚠️ EMERGENCY STOP', 'log-warn');
+            } else if (action === 'describe') {
+                setState(STATES.THINKING);
+                log('Capturing image → VLM...', '');
+                setTimeout(() => {
+                    setState(STATES.SPEAKING);
+                    log('VLM: "A room with desks, a blue bottle, and a yellow mug."', 'log-accent');
+                    setTimeout(() => setState(STATES.IDLE), 2000);
+                }, 800);
+            } else {
+                handleCommand(action);
+            }
+        });
+    });
+
+    document.getElementById('send-btn').addEventListener('click', () => {
+        handleCommand(document.getElementById('cmd-input').value);
+        document.getElementById('cmd-input').value = '';
+    });
+    document.getElementById('cmd-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            handleCommand(e.target.value);
+            e.target.value = '';
+        }
+    });
+
+    document.getElementById('speed-slider').addEventListener('input', e => {
+        speed = parseInt(e.target.value);
+        document.getElementById('speed-val').textContent = speed;
+    });
+
+    // Keyboard
+    const keysDown = {};
+    document.addEventListener('keydown', e => {
+        if (document.activeElement === document.getElementById('cmd-input')) return;
+        if (keysDown[e.key]) return;
+        keysDown[e.key] = true;
+        if (e.key === 'ArrowUp' || e.key === 'w') { cancelFlag = false; executeAction('forward', 99999, speed); setState(STATES.ACTING); }
+        else if (e.key === 'ArrowDown' || e.key === 's') { cancelFlag = false; executeAction('backward', 99999, speed); setState(STATES.ACTING); }
+        else if (e.key === 'ArrowLeft' || e.key === 'a') { cancelFlag = false; executeAction('left', 99999, speed); setState(STATES.ACTING); }
+        else if (e.key === 'ArrowRight' || e.key === 'd') { cancelFlag = false; executeAction('right', 99999, speed); setState(STATES.ACTING); }
+        else if (e.key === ' ') { e.preventDefault(); handleCommand('stop'); }
+    });
+    document.addEventListener('keyup', e => {
+        keysDown[e.key] = false;
+        if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'].includes(e.key)) {
+            stopMotors();
+            if (state === STATES.ACTING && actionQueue.length === 0) setState(STATES.IDLE);
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    log('KANDA Simulator initialized. 7-state machine ready.', 'log-accent');
+    log('Use WASD/arrows to drive, or type commands.', '');
+})();
+</script>
 </body>
 </html>
