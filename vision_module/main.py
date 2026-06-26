@@ -3,12 +3,17 @@ KANDA — Full Embodied AI Agent (Phase 4)
 
 Architecture:
   - 7-state machine: IDLE → LISTENING → THINKING → ACTING/SEARCHING → SPEAKING → REPORTING → IDLE
-  - Wake word thread (Porcupine offline, or Enter key fallback)
+  - Wake word thread (openWakeWord offline, or Enter key fallback)
   - ESP32 heartbeat monitor (warns if telemetry stops)
   - cancel_event: lets "Hey Kanda stop" abort any running task
-  - body_context: full sensor + scene + history passed to every Gemini call
+  - body_context: full sensor + scene + history passed to every LLM call
   - task_agent: handles ALL intents (COMMAND / QUESTION / TASK)
   - plan_executor: walks AI-generated JSON plans (move, speak, capture_check, loop_while)
+
+Cloud APIs:
+  - Groq (Llama 3.3 70B) — intent classification, planning, grounded Q&A
+  - NVIDIA NIM (Llama 3.2 11B Vision) — scene understanding
+  - Groq Whisper — speech transcription
 
 Usage:
     export GROQ_API_KEY=your_key
@@ -37,7 +42,6 @@ from voice_command import VoiceTranscriber
 from wake_word import WakeWordDetector
 from body_context import BodyContext
 from task_agent import TaskAgent
-from presentation import Presentation
 import config
 from config import State
 import telegram_input
@@ -118,19 +122,19 @@ def read_telemetry(serial_conn) -> Optional[dict]:
     if serial_conn is None:
         return None
     try:
+        # Check without lock first to avoid blocking senders
+        if serial_conn.in_waiting == 0:
+            time.sleep(0.1)
+        if serial_conn.in_waiting == 0:
+            return None
+
         with _serial_lock:
-            # Read all available bytes and take the last complete line
-            if serial_conn.in_waiting == 0:
-                time.sleep(0.05)
-            if serial_conn.in_waiting == 0:
-                return None
-            # Read everything available
             raw_bytes = serial_conn.read(serial_conn.in_waiting)
 
         # Decode and find the last line with telemetry format
         lines = raw_bytes.decode("utf-8", errors="ignore").strip().split("\n")
         for line in reversed(lines):
-            line = line.strip()
+            line = line.strip().replace("\r", "")
             if "->" in line:
                 parts, action_part = line.split("->", 1)
                 normalised = parts.replace(": ", ":").replace(":  ", ":")
@@ -191,7 +195,6 @@ def run_state_machine(
     agent: TaskAgent,
     body_ctx: BodyContext,
     serial_conn,
-    presenter: Presentation = None,
     wake_detector=None,
 ) -> None:
     """
@@ -203,7 +206,12 @@ def run_state_machine(
         send_to_esp32(serial_conn, action, speed, state_str)
 
     set_state(State.IDLE, serial_conn)
-    spk.speak_blocking("Kanda online. Say Hey Kanda to begin.")
+    if wake_detector:
+        wake_detector.pause()
+    spk.speak_blocking("Kanda online. Say Hey Jarvis to begin.")
+    time.sleep(0.3)
+    if wake_detector:
+        wake_detector.resume()
     logger.info("[main] state machine running")
 
     while not _shutdown_event.is_set():
@@ -212,7 +220,10 @@ def run_state_machine(
         if _current_state == State.IDLE:
             _cancel_event.clear()
             # Make sure wake word listener has the mic
+            # Small delay prevents speaker buffer from triggering false wake
             if wake_detector:
+                if spk.is_speaking:
+                    time.sleep(0.5)
                 wake_detector.resume()
             woke = _wake_event.wait(timeout=0.5)
             if not woke:
@@ -243,6 +254,7 @@ def run_state_machine(
 
                 if transcript is None or transcript == "":
                     spk.speak_blocking("I'm here. Tell me what I can do for you — move around, describe what I see, or find something.")
+                    time.sleep(0.5)  # allow Bluetooth speaker buffer to drain
                     set_state(State.IDLE, serial_conn)
                     continue
 
@@ -258,8 +270,14 @@ def run_state_machine(
                     telegram_input.send_message(tg_chat_id, text)
 
             def say(text: str) -> None:
-                """Speak via TTS and mirror the reply to Telegram."""
+                """Speak via TTS and mirror the reply to Telegram.
+                Pauses wake word detection to prevent self-triggering."""
+                if wake_detector:
+                    wake_detector.pause()
                 spk.speak_blocking(text)
+                time.sleep(0.3)  # allow speaker buffer to drain
+                if wake_detector:
+                    wake_detector.resume()
                 tg_reply(text)
                 body_ctx.add_turn("kanda", text)
 
@@ -268,37 +286,6 @@ def run_state_machine(
 
             # Detect "stop" command immediately — cancel anything running
             low = transcript.lower()
-
-            # ── Presentation triggers (voice: "next slide", "previous slide") ──
-            if presenter and presenter.active:
-                if any(w in low for w in ("next slide", "next", "advance")):
-                    speech = presenter.advance()
-                    if speech:
-                        title = presenter.current_title()
-                        tg_reply(f"[{presenter.index + 1}/{presenter.total}] {title}")
-                        set_state(State.SPEAKING, serial_conn)
-                        say(speech)
-                        tg_reply("Done. Say 'next slide' or /next")
-                    else:
-                        say("End of presentation.")
-                    set_state(State.IDLE, serial_conn)
-                    continue
-                elif any(w in low for w in ("previous slide", "previous", "go back")):
-                    speech = presenter.previous()
-                    if speech:
-                        title = presenter.current_title()
-                        tg_reply(f"[{presenter.index + 1}/{presenter.total}] {title}")
-                        set_state(State.SPEAKING, serial_conn)
-                        say(speech)
-                    else:
-                        say("Already at the first slide.")
-                    set_state(State.IDLE, serial_conn)
-                    continue
-                elif any(w in low for w in ("end presentation", "stop presenting")):
-                    presenter.stop()
-                    say("Presentation ended.")
-                    set_state(State.IDLE, serial_conn)
-                    continue
 
             if any(w in low for w in ("stop", "halt", "cancel", "abort")):
                 _cancel_event.set()
@@ -318,13 +305,25 @@ def run_state_machine(
             if intent["intent"] == "COMMAND":
                 action   = intent.get("action") or "stop"
                 speed    = int(intent.get("speed", config.SPEED_NORMAL))
-                duration = float(intent.get("duration", 0.5))  # 0.5s default — short bursts
 
-                set_state(State.SPEAKING, serial_conn)
-                if reply:
-                    say(reply)
+                # Use degrees for turns, duration for forward/backward
+                degrees  = float(intent.get("degrees", 0))
+                if degrees and action in ("left", "right", "slight_left", "slight_right"):
+                    duration = degrees * config.TURN_MS_PER_DEG / 1000
+                    speed = speed or config.SPEED_TURN
                 else:
-                    # Interactive acknowledgment
+                    duration = float(intent.get("duration", 2.0))  # 2s default for real movement
+
+                # Start moving immediately, speak acknowledgment in background
+                set_state(State.ACTING, serial_conn)
+                send(action, speed, "acting")
+                body_ctx.log_action(action, speed)
+
+                if reply:
+                    spk.speak(reply)
+                    tg_reply(reply)
+                    body_ctx.add_turn("kanda", reply)
+                else:
                     ack = {
                         "forward": "Moving forward.",
                         "backward": "Going back.",
@@ -334,17 +333,21 @@ def run_state_machine(
                         "slight_right": "Slight right.",
                         "stop": "Stopping.",
                     }
-                    say(ack.get(action, "OK."))
+                    ack_text = ack.get(action, "OK.")
+                    spk.speak(ack_text)
+                    tg_reply(ack_text)
+                    body_ctx.add_turn("kanda", ack_text)
 
-                set_state(State.ACTING, serial_conn)
-                send(action, speed, "acting")
-                body_ctx.log_action(action, speed)
-                tg_reply(f"⚡ {action} ({duration}s)")
+                label = f"{degrees}°" if degrees else f"{duration}s"
+                tg_reply(f"⚡ {action} ({label})")
 
-                # Hold movement for the requested duration, respecting cancel
-                _cancel_event.wait(timeout=duration)
+                # Keep-alive: resend command every 0.5s so ESP32 stays moving
+                deadline = time.time() + duration
+                while time.time() < deadline:
+                    if _cancel_event.wait(timeout=0.5):
+                        break
+                    send(action, speed, "acting")
 
-                # Stop after duration (or if cancelled)
                 send("stop", 0, "idle")
                 set_state(State.IDLE, serial_conn)
                 continue
@@ -415,16 +418,18 @@ def run_state_machine(
                     say("Watch my moves!")
                     tg_reply("💃 Dancing!")
                     dance_moves = [
-                        ("right", 0.3), ("left", 0.3), ("right", 0.3), ("left", 0.3),
-                        ("forward", 0.3), ("backward", 0.3), ("forward", 0.3), ("backward", 0.3),
-                        ("right", 0.5), ("right", 0.5), ("left", 0.5), ("left", 0.5),
-                        ("forward", 0.2), ("backward", 0.2), ("right", 0.4), ("left", 0.4),
+                        ("right", 0.6), ("left", 0.6), ("right", 0.6), ("left", 0.6),
+                        ("forward", 0.5), ("backward", 0.5), ("forward", 0.5), ("backward", 0.5),
+                        ("right", 0.8), ("right", 0.8), ("left", 0.8), ("left", 0.8),
+                        ("forward", 0.4), ("backward", 0.4), ("right", 0.6), ("left", 0.6),
                     ]
                     for move, dur in dance_moves:
                         if _cancel_event.is_set():
                             break
                         send(move, config.SPEED_TURN, "acting")
                         time.sleep(dur)
+                        send("stop", 0, "acting")
+                        time.sleep(0.1)
                     send("stop", 0, "idle")
                     say("How was that?")
                     result = "done"
@@ -599,8 +604,7 @@ def main():
         import serial as pyserial
         for port in [config.SERIAL_PORT, "/dev/ttyACM0"]:
             try:
-                serial_conn = pyserial.Serial(port, config.SERIAL_BAUD, timeout=0.5, dsrdtr=False)
-                serial_conn.dtr = False  # Don't reset ESP32
+                serial_conn = pyserial.Serial(port, config.SERIAL_BAUD, timeout=0.5)
                 time.sleep(1)
                 serial_conn.reset_input_buffer()
                 # Wait for telemetry to confirm connection
@@ -633,9 +637,6 @@ def main():
         cancel_event=_cancel_event,
     )
 
-    # ── Presentation mode ────────────────────────────────────────────────────
-    presenter = Presentation("slides.json")
-
     # ── Wake word detector ────────────────────────────────────────────────────
     wake_detector = WakeWordDetector(wake_event=_wake_event)
     wake_detector.start()
@@ -648,8 +649,8 @@ def main():
         camera=cam,
         body_ctx=body_ctx,
         serial=serial_conn,
+        serial_lock=_serial_lock,
         vlm=vlm,
-        presenter=presenter,
         speaker=spk,
     )
 
@@ -698,18 +699,38 @@ def main():
     print("\nReady. Say 'Hey Kanda' or send a message via Telegram.")
     print("Commands: 'go forward', 'turn left', 'what do you see', 'find my bottle', ...\n")
 
-    # ── Run state machine (blocks forever) ────────────────────────────────────
-    run_state_machine(
-        spk=spk,
-        cam=cam,
-        vlm=vlm,
-        transcriber=transcriber,
-        agent=agent,
-        body_ctx=body_ctx,
-        serial_conn=serial_conn,
-        presenter=presenter,
-        wake_detector=wake_detector,
-    )
+    # ── Run state machine with crash recovery ─────────────────────────────────
+    MAX_RESTARTS = 5
+    restart_count = 0
+
+    while not _shutdown_event.is_set() and restart_count < MAX_RESTARTS:
+        try:
+            run_state_machine(
+                spk=spk,
+                cam=cam,
+                vlm=vlm,
+                transcriber=transcriber,
+                agent=agent,
+                body_ctx=body_ctx,
+                serial_conn=serial_conn,
+                wake_detector=wake_detector,
+            )
+            break  # Normal exit
+        except Exception as exc:
+            restart_count += 1
+            logger.error("[CRASH] State machine exception (restart %d/%d): %s",
+                         restart_count, MAX_RESTARTS, exc, exc_info=True)
+            send_to_esp32(serial_conn, "stop", 0, "idle")
+            telegram_input.broadcast(
+                f"⚠️ KANDA crashed (attempt {restart_count}/{MAX_RESTARTS}): {str(exc)[:100]}\nRestarting..."
+            )
+            _cancel_event.clear()
+            time.sleep(2)
+
+    if restart_count >= MAX_RESTARTS:
+        logger.critical("[CRASH] Max restarts reached — shutting down")
+        telegram_input.broadcast("🛑 KANDA crashed too many times. Manual restart required.")
+        send_to_esp32(serial_conn, "stop", 0, "idle")
 
 
 if __name__ == "__main__":

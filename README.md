@@ -4,6 +4,9 @@
 
 A sub-$77 multimodal embodied robot where **Groq Llama 3.3 is the language brain, NVIDIA NIM Llama 3.2 Vision is the eyes, and the ESP32 is the body**. You speak to it naturally; it plans and acts using its camera, sensors, and motors with a three-layer safety architecture.
 
+> **Current version:** [`kanda_v2/`](kanda_v2/) — full async event-driven rewrite (asyncio + event bus, non-blocking).  
+> `vision_module/` is the prior stable release kept for reference.
+
 <p align="center">
   <img src="overleaf/images/kanda_robot.jpg" alt="KANDA Prototype" width="600"/>
 </p>

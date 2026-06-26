@@ -4,13 +4,13 @@ The brain that turns any user instruction into a robot plan and executes it.
 
 Responsibilities:
   1. parse_intent()     — classify transcript into COMMAND / QUESTION / TASK / UNKNOWN
-  2. plan_and_execute() — build body context, ask Gemini for a JSON plan, run it
+  2. plan_and_execute() — build body context, ask Groq for a JSON plan, run it
   3. run_search()       — ReAct search loop with semantic memory and cancel support
   4. clarify()          — ask follow-up question if goal is too vague
 
 Every LLM/VLM call:
   - Gets full body context (sensors + scene + history + capabilities)
-  - Uses Groq (text) or NVIDIA NIM (vision)
+  - Uses Groq Llama 3.3 (text) or NVIDIA NIM Llama 3.2 (vision)
   - Returns None on failure (graceful degradation)
 """
 
@@ -56,7 +56,8 @@ For TASK, extract the goal description (the full instruction).
 For QUESTION, provide a helpful spoken reply answering the question as Kanda (friendly, brief).
 
 Reply with ONLY this JSON:
-{{"intent": "COMMAND|QUESTION|TASK|UNKNOWN", "action": "forward|backward|left|right|slight_left|slight_right|stop|null", "speed": 120, "duration": 0.5, "goal": "description or null", "reply": "short friendly spoken reply"}}"""
+{{"intent": "COMMAND|QUESTION|TASK|UNKNOWN", "action": "forward|backward|left|right|slight_left|slight_right|stop|null", "speed": 120, "duration": 0.5, "degrees": 90, "goal": "description or null", "reply": "short friendly spoken reply"}}
+Notes: For turns, use "degrees" (90=right angle, 180=U-turn). For forward/backward, use "duration" in seconds."""
 
 
 _PLANNER_PROMPT = """{body_context}
@@ -65,14 +66,18 @@ You are the motion planner for KANDA robot.
 Generate a JSON plan array to accomplish the USER INSTRUCTION.
 
 Each step must be one of:
-  {{"action": "forward|backward|left|right|slight_left|slight_right|stop", "speed": 0-255, "duration_ms": N}}
+  {{"action": "forward|backward", "speed": 0-255, "duration_ms": N}}
+  {{"action": "left|right|slight_left|slight_right", "speed": 0-255, "degrees": N}}
+  {{"action": "stop", "speed": 0}}
   {{"action": "speak", "text": "..."}}
   {{"action": "capture_check", "query": "yes/no question", "on_yes": "stop_and_speak|continue|repeat|abort", "on_no": "continue|repeat|stop_and_speak|abort", "found_text": "text to speak if found", "max_repeats": N}}
   {{"action": "loop_while", "condition": "front > 25|left > 20|right > 20", "body": [steps...]}}
   {{"action": "wait", "duration_ms": N}}
 
 Rules:
-- Always end with {{"action":"stop","speed":0,"duration_ms":0}} if robot might be moving
+- For turns, ALWAYS use "degrees" (e.g. 90 for a right angle, 180 for U-turn, 360 for full spin)
+- For forward/backward, use "duration_ms" (e.g. 1000 = 1 second)
+- Always end with {{"action":"stop","speed":0}} if robot might be moving
 - Keep plans under 20 steps total
 - Use capture_check for visual goals (finding objects)
 - Use loop_while for "keep going until" patterns
@@ -81,15 +86,14 @@ Rules:
 Reply with ONLY the JSON array. No explanation. No markdown fences."""
 
 
-_SEARCH_CHECK_PROMPT = """You are a robot searching for a specific object.
-Target: {goal_description}
+_SEARCH_CHECK_PROMPT = """You are a robot searching for: {goal_description}
 
-Look at this image. Is the target object visible in this image?
-- "yes" if you can see it (even partially, from any angle, any size)
-- "no" if it is definitely NOT in the image
+Look at this image carefully. Is the EXACT target clearly visible?
+- YES ONLY if you can clearly and confidently identify the target in the image
+- NO if the target is NOT visible, or if you are unsure, or if something only vaguely resembles it
 
-Be generous — if anything in the image could reasonably be the target, say yes.
-Reply with ONLY "yes" or "no"."""
+Be strict — do NOT say YES unless you are highly confident the target is actually in the image.
+Reply with EXACTLY one word: YES or NO."""
 
 
 _SCENE_DESCRIBE_PROMPT = """Describe what you see in this image in exactly 1 sentence (under 15 words). Be specific about objects and location."""
@@ -192,7 +196,7 @@ class TaskAgent:
 
     def plan_and_execute(self, transcript: str) -> str:
         """
-        Build body context, ask Gemini for a plan, execute it.
+        Build body context, ask Groq for a plan, execute it.
         Used for TASK and QUESTION intents.
         Returns "done", "found", "cancelled", or "error".
         """
@@ -269,6 +273,7 @@ class TaskAgent:
             "found", "not_found", or "cancelled"
         """
         self._search_memory.clear()
+        self._search_step_count = 0
         consecutive_skips = 0
         similarity_threshold = config.SEARCH_SIMILARITY_THRESHOLD
 
@@ -284,19 +289,23 @@ class TaskAgent:
             self._send("stop", 0, "searching")
             time.sleep(0.3)
 
-            # 2. Capture and describe scene
-            b64 = self._cam.capture_base64()
-            if not b64 or len(b64) < (config.CAMERA_MIN_JPEG_BYTES * 4 // 3):
+            # 2. Capture and describe scene (single capture, reuse bytes)
+            jpeg = self._cam.capture_jpeg()
+            if not jpeg or len(jpeg) < config.CAMERA_MIN_JPEG_BYTES:
                 logger.warning("[search] corrupt frame at step %d, skipping", step)
                 self._move_step(step)
                 continue
 
+            b64 = base64.b64encode(jpeg).decode("utf-8")
+
             # Send captured image to Telegram
-            jpeg = self._cam.capture_jpeg()
-            if jpeg:
-                telegram_input.broadcast_photo(
-                    jpeg, caption=f"Step {step+1}/{config.SEARCH_MAX_STEPS} — looking for: {goal}"
-                )
+            telegram_input.broadcast_photo(
+                jpeg, caption=f"Step {step+1}/{config.SEARCH_MAX_STEPS} — looking for: {goal}"
+            )
+
+            # Rate-limit VLM calls to stay within free-tier limits
+            if not self._vlm.should_update():
+                time.sleep(max(0, config.VLM_INTERVAL_SEC - (time.time() - self._vlm._last_time)))
 
             scene = self._describe_scene(b64)
             if not scene:
@@ -304,7 +313,7 @@ class TaskAgent:
             self._ctx.update_scene(scene)
             logger.info("[search] step %d scene: %s", step, scene)
 
-            # 2. Check if already visited this area
+            # 2b. Check if already visited this area
             if self._already_visited(scene, similarity_threshold):
                 consecutive_skips += 1
                 logger.info("[search] step %d: already visited, skip", step)
@@ -327,8 +336,7 @@ class TaskAgent:
                 self._spk.speak_blocking(found_msg)
                 logger.info("[search] FOUND at step %d", step)
                 telegram_input.notify(f"✅ FOUND at step {step+1}! {scene}")
-                if jpeg:
-                    telegram_input.broadcast_photo(jpeg, caption=f"✅ Target found: {goal}")
+                telegram_input.broadcast_photo(jpeg, caption=f"✅ Target found: {goal}")
                 return "found"
 
             # 4. Remember this location and notify
@@ -346,7 +354,7 @@ class TaskAgent:
             # 6. Check for stuck condition (all sensors blocked)
             if self._is_stuck():
                 logger.info("[search] stuck at step %d — backing up", step)
-                self._spk.speak_blocking("I'm stuck, backing up.")
+                self._spk.speak("I'm stuck, backing up.")
                 telegram_input.notify(f"⚠️ Step {step+1}: Stuck! Backing up...")
                 self._execute_move("backward")
                 time.sleep(0.5)
@@ -386,15 +394,15 @@ Reply only the question or CLEAR."""
         return self._vlm.describe_scene(image_b64, prompt=_SCENE_DESCRIBE_PROMPT)
 
     def _check_for_goal(self, image_b64: str, goal: str) -> bool:
-        """Ask VLM if the target is visible in the frame. Uses NVIDIA NIM (primary) → Gemini (fallback)."""
+        """Ask VLM if the target is visible in the frame. Uses NVIDIA NIM."""
         prompt = _SEARCH_CHECK_PROMPT.format(goal_description=goal)
         answer = self._vlm.describe_scene(image_b64, prompt=prompt)
         if answer is None:
             logger.warning("[search] VLM check_for_goal returned None — treating as not found")
             return False
         logger.info("[search] goal check answer: '%s'", answer)
-        lower = answer.lower().strip()
-        return lower.startswith("yes") or "yes" in lower.split()[:3]
+        first_word = answer.strip().split()[0].lower().rstrip(".,!") if answer.strip() else ""
+        return first_word == "yes"
 
     def _already_visited(self, scene: str, threshold: float) -> bool:
         """Check if this scene is similar to a recently visited one."""
@@ -408,14 +416,16 @@ Reply only the question or CLEAR."""
 
     _search_step_count = 0
 
-    # Spiral search: rotate in place to scan, then move forward to new area
+    # Search pattern: scan then move, keeps exploring new ground
     _SEARCH_PATTERN = [
-        "right", "right", "right", "right",  # 4 rotations = full 360° scan
-        "forward",                             # move to new area
-        "right", "right", "right", "right",  # scan again
-        "forward",
-        "left", "left", "left", "left",      # scan other direction
-        "forward",
+        "right", "right",    # 180° scan right
+        "forward",           # advance
+        "left", "left",      # 180° scan left
+        "forward",           # advance
+        "right",             # 90° scan
+        "forward",           # advance
+        "left",              # 90° scan
+        "forward",           # advance
     ]
 
     def _choose_move(self) -> str:
@@ -442,32 +452,37 @@ Reply only the question or CLEAR."""
         return desired
 
     def _execute_move(self, action: str) -> None:
-        """Execute a movement with obstacle safety check."""
+        """Execute a movement with obstacle safety check and keep-alive."""
         sensors = self._ctx.sensors
         f = sensors.get("front", -1)
 
-        # Safety: don't drive forward into an obstacle
         if action == "forward" and 0 < f < 18:
             logger.info("[search] blocked forward (%.0fcm), turning instead", f)
             action = self._ctx.best_turn_direction
 
-        # Short movements: rotate = 400ms (≈90°), forward = 600ms
         if action in ("left", "right"):
-            duration_ms = 400
+            duration_ms = config.TURN_90_MS
             speed = config.SPEED_TURN
         else:
-            duration_ms = 600
+            duration_ms = 2000
             speed = config.SPEED_NORMAL
 
-        self._send(action, speed, "searching")
         self._ctx.log_action(action, speed, duration_ms)
-        time.sleep(duration_ms / 1000)
+        elapsed = 0
+        while elapsed < duration_ms:
+            self._send(action, speed, "searching")
+            time.sleep(0.5)
+            elapsed += 500
         self._send("stop", 0, "searching")
 
     def _move_step(self, step: int) -> None:
-        """Move one step during a search when we need to reposition."""
-        action = self._choose_move()
-        self._execute_move(action)
+        """Move forward to a new area when current position is already visited."""
+        sensors = self._ctx.sensors
+        f = sensors.get("front", -1)
+        if f < 0 or f > 25:
+            self._execute_move("forward")
+        else:
+            self._execute_move(self._ctx.best_turn_direction)
 
     def _is_stuck(self) -> bool:
         """True if multiple sensors show close obstacles."""

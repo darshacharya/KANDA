@@ -68,8 +68,8 @@ WAKE_WORD_ENABLED   = os.getenv("KANDA_WAKE_WORD", "1") == "1"
 
 
 # ── Microphone / VAD ─────────────────────────────────────────────────────────
-VAD_SILENCE_SEC   = float(os.getenv("KANDA_VAD_SILENCE", "2.0"))  # stop after this much silence
-VAD_MAX_SEC       = float(os.getenv("KANDA_VAD_MAX", "15.0"))     # hard cap — allows longer sentences
+VAD_SILENCE_SEC   = float(os.getenv("KANDA_VAD_SILENCE", "1.5"))  # stop after this much silence
+VAD_MAX_SEC       = float(os.getenv("KANDA_VAD_MAX", "10.0"))     # hard cap
 VAD_SPEECH_RMS    = int(os.getenv("KANDA_VAD_THRESHOLD", "500"))   # RMS threshold for speech vs silence
 
 
@@ -96,9 +96,17 @@ SEARCH_SIMILARITY_THRESHOLD = 0.7   # difflib ratio — above this = "already vi
 SEARCH_SIMILARITY_MIN      = 0.5    # auto-lowers to this after 5 consecutive skips
 
 # Default motor speeds
-SPEED_NORMAL = 120
-SPEED_TURN   = 100
-SPEED_SLOW   = 80
+SPEED_NORMAL = 255
+SPEED_TURN   = 200
+SPEED_SLOW   = 150
+
+# Turn calibration (milliseconds per degree at SPEED_TURN)
+# Adjust these after testing on your chassis — run a 360° spin and time it.
+# Formula: TURN_MS_PER_DEG = total_ms_for_360 / 360
+TURN_MS_PER_DEG = float(os.getenv("KANDA_TURN_MS_PER_DEG", "48.3"))  # calibrated: 17.4s for 360°
+TURN_90_MS  = int(TURN_MS_PER_DEG * 90)    # ~720ms
+TURN_180_MS = int(TURN_MS_PER_DEG * 180)   # ~1440ms
+TURN_360_MS = int(TURN_MS_PER_DEG * 360)   # ~2880ms
 
 # Plan executor step limits
 PLAN_MAX_STEPS       = 50    # safety cap on AI-generated plan length
@@ -106,11 +114,11 @@ PLAN_LOOP_MAX_ITER   = 30    # max iterations for loop_while steps
 
 
 # ── Telegram Bot Input (microphone alternative) ───────────────────────────────
-# Set TELEGRAM_BOT_TOKEN env var or paste token here.
-# Leave TELEGRAM_ALLOWED_IDS empty to allow any user, or add chat IDs like:
+# TELEGRAM_BOT_TOKEN must be set via env var or .env file (never hardcode).
+# KANDA_TG_ALLOWED must list at least one chat ID for security:
 #   KANDA_TG_ALLOWED=123456789,987654321
 TELEGRAM_ENABLED    = os.getenv("TELEGRAM_ENABLED", "1") == "1"
-TELEGRAM_BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN", "8679310303:AAH7PRXjeXXNTuFH6i68ASmy6o6yfK8g3nU")
+TELEGRAM_BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_VOICE_ENABLED = os.getenv("TELEGRAM_VOICE_ENABLED", "1") == "1"
 TELEGRAM_ALLOWED_IDS = [
     int(x) for x in os.getenv("KANDA_TG_ALLOWED", "").split(",") if x.strip().isdigit()

@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KANDA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0e0f1a;
+            --bg-surface: #161825;
+            --bg-elevated: #1e2133;
+            --bg-hover: #272b40;
+            --bg-input: #1a1d2e;
+            --accent: #e8a838;
+            --accent-dim: #c4872a;
+            --accent-soft: rgba(232,168,56,0.08);
+            --accent-glow: rgba(232,168,56,0.15);
+            --accent-strong: rgba(232,168,56,0.25);
+            --text-primary: #f0ece4;
+            --text-secondary: #9b97a8;
+            --text-muted: #5f5c6e;
+            --border: #252840;
+            --border-light: #2e3250;
+            --success: #4ade80;
+            --success-soft: rgba(74,222,128,0.12);
+            --warning: #fbbf24;
+            --danger: #f87171;
+            --danger-soft: rgba(248,113,113,0.12);
+            --user-bubble: #2a2545;
+            --user-bubble-border: #3d3560;
+            --bot-bubble: #1a1d30;
+            --bot-bubble-border: #262940;
+            --radius-xl: 20px;
+            --radius: 14px;
+            --radius-sm: 10px;
+            --radius-xs: 6px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.35);
+            --shadow-lg: 0 12px 48px rgba(0,0,0,0.5);
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-spring: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow: hidden; }
+
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ═══════════════════ HEADER ═══════════════════ */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 12px; }
+
+        .avatar {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), #d4782a);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+            position: relative;
+            box-shadow: 0 2px 12px rgba(232,168,56,0.2);
+            cursor: pointer;
+        }
+
+        .avatar .status-dot {
+            position: absolute; bottom: 0; right: 0;
+            width: 11px; height: 11px;
+            border-radius: 50%;
+            background: var(--success);
+            border: 2.5px solid var(--bg-surface);
+            transition: background var(--transition);
+        }
+
+        .avatar .status-dot.offline { background: var(--danger); }
+        .avatar .status-dot.reconnecting { background: var(--warning); animation: blink 1s infinite; }
+
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+        .header-info h1 { font-size: 0.95rem; font-weight: 600; letter-spacing: 0.3px; }
+        .header-subtitle {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem; color: var(--text-muted);
+            display: flex; align-items: center; gap: 5px;
+        }
+        .state-badge {
+            background: var(--accent-soft);
+            color: var(--accent);
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .header-actions { display: flex; gap: 4px; }
+        .hdr-btn {
+            width: 36px; height: 36px;
+            border-radius: 50%; border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 17px;
+            transition: all var(--transition);
+        }
+        .hdr-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+        .hdr-btn.active { background: var(--accent-glow); color: var(--accent); }
+
+        /* ═══════════════════ SENSOR BAR ═══════════════════ */
+        .sensor-strip {
+            display: flex; align-items: center; justify-content: center; gap: 24px;
+            padding: 0; max-height: 0; overflow: hidden;
+            background: var(--bg-surface);
+            border-bottom: 1px solid transparent;
+            font-family: 'IBM Plex Mono', monospace;
+            transition: all var(--transition-spring);
+        }
+        .sensor-strip.open {
+            padding: 8px 16px;
+            max-height: 50px;
+            border-bottom-color: var(--border);
+        }
+        .sensor-chip {
+            display: flex; align-items: center; gap: 5px;
+            font-size: 0.7rem;
+        }
+        .sensor-chip .lbl { color: var(--text-muted); text-transform: uppercase; font-size: 0.6rem; letter-spacing: 0.5px; }
+        .sensor-chip .val { font-weight: 500; color: var(--success); min-width: 38px; }
+        .sensor-chip .val.warn { color: var(--warning); }
+        .sensor-chip .val.danger { color: var(--danger); }
+
+        /* ═══════════════════ CHAT AREA ═══════════════════ */
+        .chat-wrap {
+            flex: 1; overflow-y: auto; overflow-x: hidden;
+            padding: 16px 14px 8px;
+            display: flex; flex-direction: column; gap: 4px;
+            scroll-behavior: smooth;
+        }
+        .chat-wrap::-webkit-scrollbar { width: 4px; }
+        .chat-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .chat-wrap::-webkit-scrollbar-track { background: transparent; }
+
+        /* Date separator */
+        .date-sep {
+            align-self: center;
+            font-size: 0.7rem; color: var(--text-muted);
+            background: var(--bg-elevated);
+            padding: 4px 12px; border-radius: 10px;
+            margin: 12px 0;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        /* Messages */
+        .msg {
+            display: flex; flex-direction: column;
+            max-width: 80%;
+            animation: msgSlide 0.3s var(--transition-spring);
+        }
+        @keyframes msgSlide {
+            from { opacity:0; transform: translateY(10px); }
+            to { opacity:1; transform: translateY(0); }
+        }
+        .msg.user { align-self: flex-end; }
+        .msg.bot { align-self: flex-start; }
+        .msg.system { align-self: center; max-width: 85%; }
+
+        .bubble {
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            font-size: 0.9rem;
+            line-height: 1.5;
+            word-wrap: break-word;
+            position: relative;
+        }
+
+        .msg.user .bubble {
+            background: var(--user-bubble);
+            border: 1px solid var(--user-bubble-border);
+            border-bottom-right-radius: 4px;
+        }
+        .msg.bot .bubble {
+            background: var(--bot-bubble);
+            border: 1px solid var(--bot-bubble-border);
+            border-bottom-left-radius: 4px;
+        }
+        .msg.system .bubble {
+            background: var(--accent-soft);
+            border: 1px solid rgba(232,168,56,0.15);
+            border-radius: 16px;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 6px 14px;
+        }
+
+        .bubble-img {
+            border-radius: var(--radius-sm);
+            max-width: 100%;
+            max-height: 280px;
+            object-fit: cover;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: transform var(--transition);
+            display: block;
+        }
+        .bubble-img:hover { transform: scale(1.02); }
+
+        .bubble-text { white-space: pre-wrap; }
+
+        .msg-meta {
+            display: flex; align-items: center; gap: 5px;
+            margin-top: 3px; padding: 0 4px;
+        }
+        .msg.user .msg-meta { justify-content: flex-end; }
+        .msg-time {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; color: var(--text-muted);
+        }
+        .msg-src {
+            font-size: 0.6rem; color: var(--accent-dim);
+            font-weight: 500; text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        /* Typing indicator */
+        .typing {
+            align-self: flex-start;
+            padding: 12px 18px;
+            background: var(--bot-bubble);
+            border: 1px solid var(--bot-bubble-border);
+            border-radius: var(--radius);
+            border-bottom-left-radius: 4px;
+            display: none; gap: 5px; align-items: center;
+        }
+        .typing.show { display: flex; }
+        .typing span {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--accent); opacity: 0.35;
+            animation: bounce 1.4s infinite;
+        }
+        .typing span:nth-child(2) { animation-delay: 0.2s; }
+        .typing span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce {
+            0%,60%,100% { transform: translateY(0); opacity:0.35; }
+            30% { transform: translateY(-5px); opacity:1; }
+        }
+
+        /* Scroll FAB */
+        .scroll-fab {
+            position: absolute; bottom: 16px; right: 20px;
+            width: 36px; height: 36px;
+            border-radius: 50%; border: 1px solid var(--border);
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            cursor: pointer; font-size: 14px;
+            display: none; align-items: center; justify-content: center;
+            box-shadow: var(--shadow);
+            transition: all var(--transition);
+            z-index: 50;
+        }
+        .scroll-fab.show { display: flex; }
+        .scroll-fab:hover { background: var(--bg-hover); color: var(--accent); }
+
+        /* ═══════════════════ QUICK ACTIONS ═══════════════════ */
+        .quick-bar {
+            display: flex; gap: 7px;
+            padding: 10px 14px;
+            overflow-x: auto; flex-shrink: 0;
+            border-top: 1px solid var(--border);
+            background: var(--bg-surface);
+            scrollbar-width: none;
+        }
+        .quick-bar::-webkit-scrollbar { display: none; }
+        .qbtn {
+            padding: 7px 13px;
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            font-size: 0.75rem; font-weight: 500;
+            cursor: pointer; white-space: nowrap;
+            transition: all var(--transition);
+            font-family: 'DM Sans', sans-serif;
+        }
+        .qbtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+        .qbtn:active { transform: scale(0.94); }
+        .qbtn.camera-btn { border-color: rgba(74,222,128,0.3); color: var(--success); }
+        .qbtn.camera-btn:hover { background: var(--success-soft); border-color: var(--success); }
+
+        /* ═══════════════════ INPUT AREA ═══════════════════ */
+        .input-row {
+            display: flex; align-items: flex-end; gap: 8px;
+            padding: 12px 14px;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .attach-btn {
+            width: 38px; height: 38px; border-radius: 50%;
+            border: none; background: transparent;
+            color: var(--text-muted); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; transition: all var(--transition);
+            flex-shrink: 0;
+        }
+        .attach-btn:hover { color: var(--accent); }
+
+        .input-box {
+            flex: 1; display: flex; align-items: flex-end;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 4px 6px 4px 16px;
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
+        .input-box:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        .input-box textarea {
+            flex: 1; background: transparent; border: none;
+            color: var(--text-primary);
+            font-size: 0.9rem; font-family: 'DM Sans', sans-serif;
+            resize: none; outline: none;
+            max-height: 120px; min-height: 36px;
+            padding: 7px 0; line-height: 1.4;
+        }
+        .input-box textarea::placeholder { color: var(--text-muted); }
+
+        .in-btn {
+            width: 34px; height: 34px; border-radius: 50%;
+            border: none; background: transparent;
+            color: var(--text-muted); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 17px; transition: all var(--transition);
+            flex-shrink: 0;
+        }
+        .in-btn:hover { color: var(--accent); background: var(--accent-soft); }
+        .in-btn.recording { background: var(--danger-soft) !important; color: var(--danger) !important; animation: micPulse 1.5s infinite; }
+        @keyframes micPulse { 0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,0.3);} 50%{box-shadow:0 0 0 8px rgba(248,113,113,0);} }
+
+        .send-btn {
+            width: 40px; height: 40px; border-radius: 50%;
+            border: none; background: var(--accent);
+            color: var(--bg-deep); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; flex-shrink: 0;
+            transition: all var(--transition);
+            box-shadow: 0 2px 12px rgba(232,168,56,0.25);
+        }
+        .send-btn:hover { transform: scale(1.06); box-shadow: 0 4px 20px rgba(232,168,56,0.35); }
+        .send-btn:active { transform: scale(0.92); }
+        .send-btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* ═══════════════════ LIGHTBOX ═══════════════════ */
+        .lightbox {
+            position: fixed; inset: 0;
+            z-index: 9999;
+            background: rgba(0,0,0,0.92);
+            backdrop-filter: blur(12px);
+            display: none; align-items: center; justify-content: center;
+            flex-direction: column; gap: 16px;
+            padding: 20px;
+            animation: fadeIn 0.2s ease;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 95vw; max-height: 80vh;
+            border-radius: var(--radius);
+            object-fit: contain;
+            box-shadow: var(--shadow-lg);
+        }
+        .lightbox-close {
+            position: absolute; top: 16px; right: 16px;
+            width: 40px; height: 40px; border-radius: 50%;
+            border: none; background: rgba(255,255,255,0.1);
+            color: white; font-size: 20px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .lightbox-caption {
+            color: var(--text-secondary); font-size: 0.85rem;
+            max-width: 600px; text-align: center;
+        }
+
+        /* ═══════════════════ PANELS (Controls + Settings) ═══════════════════ */
+        .panel-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(3px);
+            z-index: 200; opacity: 0; pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .panel-overlay.open { opacity: 1; pointer-events: auto; }
+
+        .slide-panel {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-bottom: none;
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+            padding: 20px 20px 28px;
+            transform: translateY(100%);
+            transition: transform var(--transition-spring);
+            z-index: 250;
+            max-height: 85vh; overflow-y: auto;
+            box-shadow: 0 -8px 40px rgba(0,0,0,0.4);
+        }
+        .slide-panel.open { transform: translateY(0); }
+        .panel-handle {
+            width: 36px; height: 4px;
+            background: var(--border-light);
+            border-radius: 2px; margin: 0 auto 16px;
+        }
+        .panel-head {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .panel-head h3 { font-size: 0.95rem; font-weight: 600; }
+        .panel-x {
+            width: 30px; height: 30px; border-radius: 50%;
+            border: none; background: var(--bg-elevated);
+            color: var(--text-secondary); font-size: 14px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+
+        /* D-Pad */
+        .dpad {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(3, 60px);
+            gap: 6px; justify-content: center; margin-bottom: 20px;
+        }
+        .dpad button {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary); font-size: 1.3rem;
+            cursor: pointer; transition: all 0.12s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .dpad button:hover { background: var(--bg-hover); border-color: var(--accent); }
+        .dpad button:active { transform: scale(0.9); background: var(--accent-strong); }
+        .dpad .stop { background: var(--danger-soft); border-color: rgba(248,113,113,0.3); color: var(--danger); }
+
+        .slider-row {
+            display: flex; align-items: center; gap: 12px;
+            padding: 0 8px;
+        }
+        .slider-row label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem; color: var(--text-muted); white-space: nowrap;
+        }
+        .slider-row input[type=range] {
+            flex: 1; height: 4px; -webkit-appearance: none; appearance: none;
+            background: var(--border); border-radius: 2px; outline: none;
+        }
+        .slider-row input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px;
+            border-radius: 50%; background: var(--accent); cursor: pointer;
+            box-shadow: 0 2px 8px rgba(232,168,56,0.3);
+        }
+
+        /* Settings panel */
+        .settings-section { margin-bottom: 20px; }
+        .settings-section h4 {
+            font-size: 0.78rem; font-weight: 600;
+            color: var(--text-muted); text-transform: uppercase;
+            letter-spacing: 0.5px; margin-bottom: 10px;
+        }
+        .setting-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 14px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            margin-bottom: 6px;
+        }
+        .setting-item .si-left { display: flex; flex-direction: column; gap: 2px; }
+        .setting-item .si-label { font-size: 0.85rem; font-weight: 500; }
+        .setting-item .si-desc { font-size: 0.7rem; color: var(--text-muted); }
+
+        /* Toggle switch */
+        .toggle {
+            width: 42px; height: 24px;
+            background: var(--border); border-radius: 12px;
+            position: relative; cursor: pointer;
+            transition: background var(--transition);
+        }
+        .toggle.on { background: var(--accent); }
+        .toggle::after {
+            content: '';
+            position: absolute; top: 3px; left: 3px;
+            width: 18px; height: 18px;
+            border-radius: 50%; background: white;
+            transition: transform var(--transition);
+        }
+        .toggle.on::after { transform: translateX(18px); }
+
+        /* ═══════════════════ ONBOARDING ═══════════════════ */
+        .onboarding {
+            position: fixed; inset: 0; z-index: 5000;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(14,15,26,0.96);
+            backdrop-filter: blur(20px);
+            padding: 20px;
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+
+        .ob-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 36px 28px;
+            max-width: 400px; width: 100%;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+        }
+        .ob-avatar {
+            width: 68px; height: 68px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), #d4782a);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px; margin: 0 auto 18px;
+            box-shadow: 0 8px 32px rgba(232,168,56,0.2);
+        }
+        .ob-card h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; }
+        .ob-card .sub { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 24px; line-height: 1.5; }
+
+        .ob-features { text-align: left; display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
+        .ob-feat {
+            display: flex; align-items: flex-start; gap: 11px;
+            padding: 10px 12px;
+            background: var(--bg-elevated);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
+        .ob-feat .ico { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+        .ob-feat .txt { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.45; }
+        .ob-feat .txt b { color: var(--text-primary); display: block; margin-bottom: 1px; font-size: 0.8rem; }
+
+        .ob-go {
+            width: 100%; padding: 13px;
+            border-radius: 14px; border: none;
+            background: var(--accent); color: var(--bg-deep);
+            font-size: 0.92rem; font-weight: 600;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer; transition: all var(--transition);
+            box-shadow: 0 4px 20px rgba(232,168,56,0.25);
+        }
+        .ob-go:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(232,168,56,0.35); }
+        .ob-go:active { transform: scale(0.97); }
+
+        /* ═══════════════════ TOAST ═══════════════════ */
+        .toast {
+            position: fixed; top: 64px; left: 50%;
+            transform: translateX(-50%) translateY(-16px);
+            padding: 8px 18px; border-radius: 18px;
+            font-size: 0.75rem; font-weight: 500;
+            z-index: 400; opacity: 0; pointer-events: none;
+            transition: all 0.3s; font-family: 'IBM Plex Mono', monospace;
+        }
+        .toast.vis { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.ok { background: var(--success-soft); color: var(--success); border: 1px solid rgba(74,222,128,0.25); }
+        .toast.err { background: var(--danger-soft); color: var(--danger); border: 1px solid rgba(248,113,113,0.25); }
+
+        /* ═══════════════════ RESPONSIVE ═══════════════════ */
+        @media (max-width: 480px) {
+            .msg { max-width: 86%; }
+            .bubble-img { max-height: 220px; }
+        }
+        @media (min-width: 768px) {
+            .chat-wrap { max-width: 680px; margin: 0 auto; width: 100%; padding: 20px 24px; }
+            .input-row { max-width: 680px; margin: 0 auto; width: 100%; }
+            .quick-bar { max-width: 680px; margin: 0 auto; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══ Onboarding ═══ -->
+<div class="onboarding" id="onboard">
+    <div class="ob-card">
+        <div class="ob-avatar">&#x1F916;</div>
+        <h2>Meet KANDA</h2>
+        <p class="sub">Your AI robot companion. Chat naturally, see through its eyes, and take control.</p>
+        <div class="ob-features">
+            <div class="ob-feat">
+                <span class="ico">&#x1F4AC;</span>
+                <div class="txt"><b>Natural chat</b>Say "go forward", "find my keys", or "what do you see?" — KANDA understands.</div>
+            </div>
+            <div class="ob-feat">
+                <span class="ico">&#x1F4F7;</span>
+                <div class="txt"><b>Camera vision</b>Ask KANDA to look around. Photos appear inline in the chat.</div>
+            </div>
+            <div class="ob-feat">
+                <span class="ico">&#x1F3AE;</span>
+                <div class="txt"><b>Drive manually</b>Open the D-pad controller to steer directly with speed control.</div>
+            </div>
+            <div class="ob-feat">
+                <span class="ico">&#x1F3A4;</span>
+                <div class="txt"><b>Voice commands</b>Tap the mic icon and speak. Works like a walkie-talkie.</div>
+            </div>
+            <div class="ob-feat">
+                <span class="ico">&#x1F9E0;</span>
+                <div class="txt"><b>AI brain</b>Powered by LLM for planning, searching, answering, and dancing.</div>
+            </div>
+        </div>
+        <button class="ob-go" onclick="closeOnboarding()">Start Chatting</button>
+    </div>
+</div>
+
+<!-- ═══ Toast ═══ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══ Lightbox ═══ -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <button class="lightbox-close" onclick="closeLightbox()">&#x2715;</button>
+    <img id="lbImg" src="" alt="Full image">
+    <div class="lightbox-caption" id="lbCaption"></div>
+</div>
+
+<!-- ═══ Header ═══ -->
+<header class="header">
+    <div class="header-left">
+        <div class="avatar" id="avatar" onclick="openSettings()">
+            &#x1F916;
+            <span class="status-dot" id="statusDot"></span>
+        </div>
+        <div class="header-info">
+            <h1>KANDA</h1>
+            <div class="header-subtitle">
+                <span class="state-badge" id="stateBadge">idle</span>
+                <span id="connLabel">connected</span>
+            </div>
+        </div>
+    </div>
+    <div class="header-actions">
+        <button class="hdr-btn" id="clearBtn" onclick="clearChat()" title="Clear chat">&#x1F5D1;</button>
+        <button class="hdr-btn" id="sensorBtn" onclick="toggleSensors()" title="Live sensors">&#x1F4E1;</button>
+        <button class="hdr-btn" id="ctrlBtn" onclick="openControls()" title="Drive controls">&#x1F3AE;</button>
+        <button class="hdr-btn" id="settBtn" onclick="openSettings()" title="Settings">&#x2699;</button>
+    </div>
+</header>
+
+<!-- ═══ Sensor strip ═══ -->
+<div class="sensor-strip" id="sensorStrip">
+    <div class="sensor-chip"><span class="lbl">Left</span><span class="val" id="sL">--</span></div>
+    <div class="sensor-chip"><span class="lbl">Front</span><span class="val" id="sF">--</span></div>
+    <div class="sensor-chip"><span class="lbl">Right</span><span class="val" id="sR">--</span></div>
+</div>
+
+<!-- ═══ Chat ═══ -->
+<div class="chat-wrap" id="chat" style="position:relative;">
+    <button class="scroll-fab" id="scrollFab" onclick="scrollToEnd()">&#x2193;</button>
+</div>
+
+<!-- ═══ Quick Actions ═══ -->
+<div class="quick-bar">
+    <button class="qbtn camera-btn" onclick="capturePhoto()">&#x1F4F7; Capture</button>
+    <button class="qbtn" onclick="qsend('What do you see?')">&#x1F440; What do you see?</button>
+    <button class="qbtn" onclick="qsend('dance')">&#x1F57A; Dance</button>
+    <button class="qbtn" onclick="qsend('go forward')">&#x2B06; Forward</button>
+    <button class="qbtn" onclick="qsend('turn around')">&#x1F504; Turn around</button>
+    <button class="qbtn" onclick="qsend('stop')">&#x1F6D1; Stop</button>
+    <button class="qbtn" onclick="qsend('explore')">&#x1F9ED; Explore</button>
+    <button class="qbtn" onclick="qsend('describe the room')">&#x1F3E0; Describe room</button>
+</div>
+
+<!-- ═══ Input ═══ -->
+<div class="input-row">
+    <button class="attach-btn" onclick="capturePhoto()" title="Take photo">&#x1F4F7;</button>
+    <div class="input-box">
+        <textarea id="msgIn" rows="1" placeholder="Message KANDA..." onkeydown="keyHandler(event)" oninput="growTA(this)"></textarea>
+        <button class="in-btn" id="micBtn" onclick="toggleMic()" title="Voice">&#x1F3A4;</button>
+    </div>
+    <button class="send-btn" id="sendBtn" onclick="send()" disabled>&#x27A4;</button>
+</div>
+
+<!-- ═══ Panel Overlay ═══ -->
+<div class="panel-overlay" id="panelBg" onclick="closePanel()"></div>
+
+<!-- ═══ Controls Panel ═══ -->
+<div class="slide-panel" id="ctrlPanel">
+    <div class="panel-handle"></div>
+    <div class="panel-head">
+        <h3>&#x1F3AE; Drive Controls</h3>
+        <button class="panel-x" onclick="closePanel()">&#x2715;</button>
+    </div>
+    <div class="dpad">
+        <div></div>
+        <button onclick="move('forward')">&#x2191;</button>
+        <div></div>
+        <button onclick="move('left')">&#x2190;</button>
+        <button class="stop" onclick="stopBot()">&#x25A0;</button>
+        <button onclick="move('right')">&#x2192;</button>
+        <div></div>
+        <button onclick="move('backward')">&#x2193;</button>
+        <div></div>
+    </div>
+    <div class="slider-row">
+        <label>Speed: <span id="speedNum">100</span></label>
+        <input type="range" id="speedRange" min="50" max="255" value="100" oninput="setSpeed(this.value)">
+    </div>
+</div>
+
+<!-- ═══ Settings Panel ═══ -->
+<div class="slide-panel" id="settPanel">
+    <div class="panel-handle"></div>
+    <div class="panel-head">
+        <h3>&#x2699; Settings</h3>
+        <button class="panel-x" onclick="closePanel()">&#x2715;</button>
+    </div>
+
+    <div class="settings-section">
+        <h4>Interface</h4>
+        <div class="setting-item">
+            <div class="si-left">
+                <span class="si-label">Sound notifications</span>
+                <span class="si-desc">Play tone when KANDA responds</span>
+            </div>
+            <div class="toggle" id="togSound" onclick="toggleSetting('sound')"></div>
+        </div>
+        <div class="setting-item">
+            <div class="si-left">
+                <span class="si-label">Auto-scroll chat</span>
+                <span class="si-desc">Jump to bottom on new messages</span>
+            </div>
+            <div class="toggle on" id="togScroll" onclick="toggleSetting('scroll')"></div>
+        </div>
+        <div class="setting-item">
+            <div class="si-left">
+                <span class="si-label">Show quick actions</span>
+                <span class="si-desc">Command suggestions above input</span>
+            </div>
+            <div class="toggle on" id="togQuick" onclick="toggleSetting('quick')"></div>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <h4>Robot</h4>
+        <div class="setting-item">
+            <div class="si-left">
+                <span class="si-label">Live sensor display</span>
+                <span class="si-desc">Show sensor readings in header</span>
+            </div>
+            <div class="toggle" id="togSensor" onclick="toggleSetting('sensor')"></div>
+        </div>
+        <div class="setting-item">
+            <div class="si-left">
+                <span class="si-label">Voice feedback</span>
+                <span class="si-desc">KANDA speaks responses aloud</span>
+            </div>
+            <div class="toggle on" id="togVoice" onclick="toggleSetting('voice')"></div>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <h4>About</h4>
+        <div class="setting-item" style="flex-direction:column;align-items:flex-start;gap:4px;">
+            <span class="si-label">KANDA v2</span>
+            <span class="si-desc">Embodied AI Robot — Groq LLM + NVIDIA Vision<br>Web UI served on port 8080</span>
+        </div>
+    </div>
+</div>
+
+<script>
+// ═══════════════════ STATE ═══════════════════
+let ws, recognition, isRec = false, pollId = null;
+let connected = false, currentState = 'idle';
+let autoScroll = true, lastScrollTop = 0;
+
+const prefs = {
+    sound: false, scroll: true, quick: true, sensor: false, voice: true,
+    ...JSON.parse(localStorage.getItem('kanda_prefs') || '{}')
+};
+
+// ═══════════════════ ONBOARDING ═══════════════════
+if (localStorage.getItem('kanda_ob')) {
+    document.getElementById('onboard')?.remove();
+    setTimeout(welcome, 300);
+} else {
+    document.querySelector('.chat-wrap').style.opacity = '0';
+}
+
+function closeOnboarding() {
+    const el = document.getElementById('onboard');
+    el.style.opacity = '0'; el.style.pointerEvents = 'none';
+    setTimeout(() => el.remove(), 400);
+    localStorage.setItem('kanda_ob', '1');
+    document.querySelector('.chat-wrap').style.opacity = '1';
+    welcome();
+}
+
+function welcome() {
+    sysMsg("Welcome! Type a message, use voice, or tap a quick action. Tap &#x1F4F7; to see through KANDA's camera.");
+}
+
+// ═══════════════════ TOAST ═══════════════════
+function toast(txt, type='ok') {
+    const t = document.getElementById('toast');
+    t.textContent = txt; t.className = `toast ${type} vis`;
+    setTimeout(() => t.classList.remove('vis'), 3000);
+}
+
+// ═══════════════════ PANELS ═══════════════════
+function openControls() {
+    document.getElementById('panelBg').classList.add('open');
+    document.getElementById('ctrlPanel').classList.add('open');
+    document.getElementById('ctrlBtn').classList.add('active');
+}
+function openSettings() {
+    document.getElementById('panelBg').classList.add('open');
+    document.getElementById('settPanel').classList.add('open');
+    document.getElementById('settBtn').classList.add('active');
+}
+function closePanel() {
+    document.getElementById('panelBg').classList.remove('open');
+    document.getElementById('ctrlPanel').classList.remove('open');
+    document.getElementById('settPanel').classList.remove('open');
+    document.getElementById('ctrlBtn').classList.remove('active');
+    document.getElementById('settBtn').classList.remove('active');
+}
+
+function clearChat() {
+    document.getElementById('chat').innerHTML = '';
+    lastHistoryLen = 0;
+    fetch('/api/clear', {method:'POST'});
+    toast('Chat cleared','ok');
+}
+
+function toggleSensors() {
+    const s = document.getElementById('sensorStrip');
+    s.classList.toggle('open');
+    document.getElementById('sensorBtn').classList.toggle('active');
+    prefs.sensor = s.classList.contains('open');
+    savePrefs();
+}
+
+function toggleSetting(key) {
+    const el = document.getElementById('tog' + key.charAt(0).toUpperCase() + key.slice(1));
+    prefs[key] = !prefs[key];
+    el.classList.toggle('on', prefs[key]);
+    savePrefs();
+    if (key === 'quick') document.querySelector('.quick-bar').style.display = prefs.quick ? 'flex' : 'none';
+    if (key === 'sensor') document.getElementById('sensorStrip').classList.toggle('open', prefs.sensor);
+}
+
+function savePrefs() { localStorage.setItem('kanda_prefs', JSON.stringify(prefs)); }
+
+// Apply initial prefs
+if (prefs.sensor) document.getElementById('sensorStrip').classList.add('open');
+if (!prefs.quick) document.querySelector('.quick-bar').style.display = 'none';
+['sound','scroll','quick','sensor','voice'].forEach(k => {
+    const el = document.getElementById('tog' + k.charAt(0).toUpperCase() + k.slice(1));
+    if (el) el.classList.toggle('on', prefs[k]);
+});
+
+// ═══════════════════ LIGHTBOX ═══════════════════
+function openLightbox(src, caption='') {
+    document.getElementById('lbImg').src = src;
+    document.getElementById('lbCaption').textContent = caption;
+    document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+}
+
+// ═══════════════════ MESSAGES ═══════════════════
+function addMsg(text, type='bot', opts={}) {
+    const chat = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = `msg ${type}`;
+
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    let imgHtml = '';
+    if (opts.image) {
+        const src = `data:image/jpeg;base64,${opts.image}`;
+        imgHtml = `<img class="bubble-img" src="${src}" onclick="openLightbox(this.src, '${esc(text)}')" alt="Camera capture">`;
+    }
+
+    const srcBadge = opts.source ? `<span class="msg-src">${esc(opts.source)}</span>` : '';
+
+    div.innerHTML = `
+        <div class="bubble">
+            ${imgHtml}
+            <span class="bubble-text">${esc(text)}</span>
+        </div>
+        <div class="msg-meta">
+            ${srcBadge}
+            <span class="msg-time">${time}</span>
+        </div>
+    `;
+    chat.appendChild(div);
+    hideTyping();
+    if (prefs.scroll) scrollToEnd();
+    updateScrollFab();
+}
+
+function addImageMsg(imageB64, caption='', source='camera') {
+    const chat = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = 'msg bot';
+
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    const src = `data:image/jpeg;base64,${imageB64}`;
+
+    div.innerHTML = `
+        <div class="bubble">
+            <img class="bubble-img" src="${src}" onclick="openLightbox(this.src, '${esc(caption)}')" alt="Camera">
+            ${caption ? `<span class="bubble-text">${esc(caption)}</span>` : ''}
+        </div>
+        <div class="msg-meta">
+            <span class="msg-src">${esc(source)}</span>
+            <span class="msg-time">${time}</span>
+        </div>
+    `;
+    chat.appendChild(div);
+    hideTyping();
+    if (prefs.scroll) scrollToEnd();
+}
+
+function sysMsg(html) {
+    const chat = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = 'msg system';
+    div.innerHTML = `<div class="bubble">${html}</div>`;
+    chat.appendChild(div);
+    if (prefs.scroll) scrollToEnd();
+}
+
+function showTyping() {
+    let t = document.getElementById('typingEl');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'typingEl'; t.className = 'typing show';
+        t.innerHTML = '<span></span><span></span><span></span>';
+        document.getElementById('chat').appendChild(t);
+    } else { t.classList.add('show'); }
+    if (prefs.scroll) scrollToEnd();
+}
+
+function hideTyping() {
+    const t = document.getElementById('typingEl');
+    if (t) { t.classList.remove('show'); t.remove(); }
+}
+
+function scrollToEnd() {
+    const c = document.getElementById('chat');
+    requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; });
+}
+
+function updateScrollFab() {
+    const c = document.getElementById('chat');
+    const fab = document.getElementById('scrollFab');
+    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
+    fab.classList.toggle('show', !atBottom);
+}
+
+document.getElementById('chat').addEventListener('scroll', updateScrollFab);
+
+function esc(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+// ═══════════════════ SEND / INPUT ═══════════════════
+function send() {
+    const ta = document.getElementById('msgIn');
+    const text = ta.value.trim();
+    if (!text) return;
+
+    addMsg(text, 'user');
+    ta.value = ''; ta.style.height = 'auto';
+    document.getElementById('sendBtn').disabled = true;
+
+    if (text.toLowerCase() === 'stop' || text.toLowerCase() === 'halt') {
+        fetch('/api/stop', {method:'POST'});
+        sysMsg("Stopped");
+        return;
+    }
+
+    showTyping();
+    wsSend({ type: 'command', text }) || fetch('/api/command', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ text })
+    });
+}
+
+function qsend(text) {
+    document.getElementById('msgIn').value = text;
+    send();
+}
+
+function capturePhoto() {
+    showTyping();
+    sysMsg("&#x1F4F7; Capturing photo...");
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'capture' }));
+    } else {
+        fetch('/api/capture').then(r => r.json()).then(d => {
+            hideTyping();
+            if (d.ok) addImageMsg(d.image, '', 'camera');
+            else sysMsg("Camera unavailable");
+        }).catch(() => { hideTyping(); sysMsg("Camera error"); });
+    }
+}
+
+function growTA(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    document.getElementById('sendBtn').disabled = !el.value.trim();
+}
+
+function keyHandler(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+}
+
+// ═══════════════════ MOVEMENT ═══════════════════
+function move(action) {
+    const speed = +document.getElementById('speedRange').value;
+    const payload = { type: 'move', action, duration_ms: 400, speed };
+    wsSend(payload) || fetch('/api/move', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    sysMsg(`&#x1F697; ${action}`);
+}
+function stopBot() {
+    wsSend({type:'stop'}) || fetch('/api/stop',{method:'POST'});
+    sysMsg("&#x1F6D1; Stopped");
+}
+function setSpeed(v) {
+    document.getElementById('speedNum').textContent = v;
+    fetch('/api/speed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({speed:+v})});
+}
+
+// ═══════════════════ VOICE ═══════════════════
+function toggleMic() {
+    const btn = document.getElementById('micBtn');
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+        toast('Speech not supported','err'); return;
+    }
+    if (isRec) { recognition.stop(); btn.classList.remove('recording'); isRec=false; return; }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR();
+    recognition.lang = 'en-US'; recognition.continuous = false;
+    recognition.onresult = e => {
+        const text = e.results[0][0].transcript;
+        addMsg(text, 'user', {source:'voice'});
+        showTyping();
+        wsSend({type:'command',text}) || fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    };
+    recognition.onend = () => { btn.classList.remove('recording'); isRec=false; };
+    recognition.onerror = () => { btn.classList.remove('recording'); isRec=false; toast('Voice failed','err'); };
+    recognition.start();
+    btn.classList.add('recording'); isRec=true;
+}
+
+// ═══════════════════ SENSORS ═══════════════════
+function updateSensors(d) {
+    setS('sF', d.front); setS('sL', d.left); setS('sR', d.right);
+}
+function setS(id, v) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = v < 0 ? '--' : v.toFixed(0)+'cm';
+    el.className = 'val' + (v<0?'':v<15?' danger':v<30?' warn':'');
+}
+
+// ═══════════════════ WEBSOCKET ═══════════════════
+function wsSend(obj) {
+    if (ws && ws.readyState === 1) { ws.send(JSON.stringify(obj)); return true; }
+    return false;
+}
+
+function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+    ws.onopen = () => {
+        connected = true;
+        document.getElementById('statusDot').className = 'status-dot';
+        document.getElementById('connLabel').textContent = 'connected';
+        toast('Connected','ok');
+        if (pollId) { clearInterval(pollId); pollId=null; }
+    };
+
+    ws.onmessage = e => {
+        const msg = JSON.parse(e.data);
+        switch(msg.type) {
+            case 'state_change':
+                currentState = msg.data.new;
+                document.getElementById('stateBadge').textContent = currentState;
+                if (currentState === 'thinking') showTyping();
+                break;
+            case 'sensor_update':
+                updateSensors(msg.data);
+                break;
+            case 'response':
+                hideTyping();
+                if (msg.data.image) {
+                    addMsg(msg.data.text, 'bot', {source: msg.data.source, image: msg.data.image});
+                } else {
+                    addMsg(msg.data.text, 'bot', {source: msg.data.source});
+                }
+                break;
+            case 'image':
+                hideTyping();
+                addImageMsg(msg.data.image, '', msg.data.source || 'camera');
+                break;
+        }
+    };
+
+    ws.onclose = () => {
+        connected = false;
+        document.getElementById('statusDot').className = 'status-dot reconnecting';
+        document.getElementById('connLabel').textContent = 'reconnecting...';
+        startPoll();
+        setTimeout(connect, 4000);
+    };
+
+    ws.onerror = () => {};
+}
+
+function startPoll() {
+    if (pollId) return;
+    pollId = setInterval(async () => {
+        try {
+            const r = await fetch('/api/status');
+            const d = await r.json();
+            currentState = d.state;
+            document.getElementById('stateBadge').textContent = d.state;
+            updateSensors(d.sensors);
+            document.getElementById('statusDot').className = 'status-dot';
+            document.getElementById('connLabel').textContent = 'polling';
+        } catch { document.getElementById('statusDot').className = 'status-dot offline'; }
+        pollHistory();
+    }, 1500);
+}
+
+// ═══════════════════ HISTORY POLLING (fallback when WS is down) ═══════════════════
+let lastHistoryLen = 0;
+async function pollHistory() {
+    if (ws && ws.readyState === 1) return;
+    try {
+        const r = await fetch('/api/history');
+        const d = await r.json();
+        const msgs = d.messages || [];
+        if (msgs.length > lastHistoryLen) {
+            const newMsgs = msgs.slice(lastHistoryLen);
+            for (const m of newMsgs) {
+                if (m.type === 'response') {
+                    hideTyping();
+                    if (m.image) {
+                        addMsg(m.text, 'bot', {source: m.source, image: m.image});
+                    } else {
+                        addMsg(m.text, 'bot', {source: m.source});
+                    }
+                } else if (m.type === 'image') {
+                    hideTyping();
+                    addImageMsg(m.image, '', m.source || 'camera');
+                }
+            }
+        }
+        lastHistoryLen = msgs.length;
+    } catch {}
+}
+
+// ═══════════════════ INIT ═══════════════════
+connect();
+startPoll();
+fetch('/api/speed').then(r=>r.json()).then(d=>{
+    document.getElementById('speedRange').value = d.speed;
+    document.getElementById('speedNum').textContent = d.speed;
+}).catch(()=>{});
+fetch('/api/history').then(r=>r.json()).then(d=>{
+    const msgs = d.messages || [];
+    for (const m of msgs) {
+        if (m.type === 'response') {
+            if (m.image) {
+                addMsg(m.text, 'bot', {source: m.source, image: m.image});
+            } else {
+                addMsg(m.text, 'bot', {source: m.source});
+            }
+        }
+    }
+    lastHistoryLen = msgs.length;
+}).catch(()=>{});
+</script>
+</body>
+</html>

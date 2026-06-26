@@ -1,11 +1,12 @@
 """
 KANDA Vision Module — Plan Executor
-Walks a Gemini-generated JSON plan array step by step.
+Walks an AI-generated (Groq) JSON plan array step by step.
 
-Plan format (Gemini must output this):
+Plan format:
 [
   {"action": "forward",       "speed": 120, "duration_ms": 2000},
-  {"action": "left",          "speed": 100, "duration_ms": 5000},
+  {"action": "left",          "speed": 100, "degrees": 90},
+  {"action": "right",         "speed": 100, "degrees": 180},
   {"action": "speak",         "text": "Turning left now"},
   {"action": "capture_check", "query": "Is there a blue bottle?",
                                "on_yes": "stop_and_speak", "on_no": "continue",
@@ -18,6 +19,7 @@ Plan format (Gemini must output this):
 
 Step types:
   move     : forward / backward / left / right / slight_left / slight_right / stop
+             Turns support "degrees" (converted via TURN_MS_PER_DEG calibration).
   speak    : say text via TTS
   capture_check : take photo, ask VLM yes/no, branch
   loop_while    : repeat body while sensor condition is true
@@ -46,9 +48,10 @@ _MOVE_ACTIONS = {
 
 class PlanExecutor:
     """
-    Executes a JSON plan array produced by the AI planner (Groq).
+    Executes a JSON plan array produced by the Groq LLM planner.
     Handles move, speak, capture_check, loop_while, wait steps.
     Respects cancel_event to abort mid-plan.
+    Safety: clamps speed to [0,255], caps duration to 10s, checks obstacles before forward moves.
     """
 
     def __init__(
@@ -116,8 +119,26 @@ class PlanExecutor:
 
     def _step_move(self, step: dict) -> str:
         action      = step.get("action", "stop")
-        speed       = int(step.get("speed", config.SPEED_NORMAL))
-        duration_ms = int(step.get("duration_ms", 0))
+        speed       = max(0, min(255, int(step.get("speed", config.SPEED_NORMAL))))
+
+        # Support degree-based turns: {"action": "left", "degrees": 90}
+        degrees = step.get("degrees", 0)
+        if degrees and action in ("left", "right", "slight_left", "slight_right"):
+            duration_ms = int(degrees * config.TURN_MS_PER_DEG)
+            duration_ms = max(100, min(10_000, duration_ms))
+            speed = speed or config.SPEED_TURN
+        else:
+            duration_ms = int(step.get("duration_ms", 0))
+            if duration_ms == 0 and action != "stop":
+                duration_ms = 500  # minimum 500ms so the robot actually moves
+            duration_ms = max(0, min(10_000, duration_ms))
+
+        # Safety: don't drive forward into an obstacle
+        sensors = self._ctx.sensors
+        f = sensors.get("front", -1)
+        if action == "forward" and 0 < f < 18:
+            logger.info("[executor] blocked forward (%.0fcm), turning instead", f)
+            action = self._ctx.best_turn_direction
 
         self._send(action, speed, "acting")
         self._ctx.log_action(action, speed, duration_ms)
@@ -146,7 +167,7 @@ class PlanExecutor:
 
     def _step_capture_check(self, step: dict, plan: list, step_idx: int) -> str:
         """
-        Capture a camera frame, ask Gemini a yes/no question about it.
+        Capture a camera frame, ask VLM a yes/no question about it.
         on_yes / on_no can be:
           "continue"       — move to next step
           "stop_and_speak" — stop, speak found_text, return "found"
@@ -168,11 +189,12 @@ class PlanExecutor:
                 logger.warning("[executor] corrupt frame, skipping check")
                 return "ok"
 
-            self._ctx.update_scene(self._vlm.last_description or "")
-
-            # Ask Gemini the yes/no question
             answer = self._ask_yes_no(b64, query)
             logger.info("[executor] capture_check: %s → %s", query[:50], answer)
+
+            # Update scene context after VLM call so it reflects the latest frame
+            if self._vlm.last_description:
+                self._ctx.update_scene(self._vlm.last_description)
 
             branch = on_yes if answer else on_no
 
@@ -201,9 +223,8 @@ class PlanExecutor:
 
     def _step_loop_while(self, step: dict) -> str:
         """
-        Repeat body steps while a sensor condition is true.
-        Conditions: "front > N", "left > N", "right > N"
-        (N in cm)
+        Repeat body steps while a sensor condition is true (max PLAN_LOOP_MAX_ITER).
+        Conditions: "front > N", "left > N", "right > N" (N in cm)
         """
         condition = step.get("condition", "")
         body      = step.get("body", [])
@@ -243,13 +264,14 @@ class PlanExecutor:
         prompt = (
             f"Look at this image carefully.\n"
             f"Question: {query}\n"
-            f"Reply with ONLY the word 'yes' or 'no'. Nothing else."
+            f"You MUST reply with EXACTLY one word: YES or NO.\n"
+            f"Do not add any explanation. Just YES or NO."
         )
         answer = self._vlm.describe_scene(image_b64, prompt=prompt)
         if answer is None:
             return False
-        lower = answer.lower().strip()
-        return lower.startswith("yes") or "yes" in lower.split()[:3]
+        first_word = answer.strip().split()[0].lower().rstrip(".,!") if answer.strip() else ""
+        return first_word == "yes"
 
     # Allowed pattern: "<sensor> <op> <number>"  e.g. "front > 25", "left < 15.5"
     _CONDITION_RE = re.compile(

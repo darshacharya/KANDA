@@ -10,8 +10,8 @@ Commands
   /status  — reply with last known sensor readings + state
   /esp32   — send a test ping to ESP32 and show last telemetry
   /help    — list all commands
-  <text>   — treated as a voice command (routed through Gemini)
-  <voice>  — transcribed via Gemini, then processed as text
+  <text>   — treated as a voice command (routed through Groq LLM)
+  <voice>  — transcribed via Groq Whisper, then processed as text
   <photo>  — object described via VLM, then robot searches for it
 """
 
@@ -48,12 +48,27 @@ _shutdown_event: Optional[threading.Event] = None
 _camera_ref    = None   # Camera instance for /photo
 _body_ctx_ref  = None   # BodyContext for /status
 _serial_ref    = None   # serial.Serial for /esp32 test
+_serial_lock   = None   # threading.Lock shared with main for serial writes
 _vlm_ref       = None   # VLM instance for vision questions
-_presenter_ref = None   # Presentation instance for slide mode
-_speaker_ref   = None   # Speaker instance for TTS during presentation
+_speaker_ref   = None   # Speaker instance for TTS
 
 # Last telemetry dict received by heartbeat thread (updated externally)
 last_telemetry: Optional[dict] = None
+
+
+def _safe_serial_write(data: bytes) -> bool:
+    """Write to ESP32 serial with proper locking. Returns True on success."""
+    if _serial_ref is None:
+        return False
+    lock = _serial_lock or threading.Lock()
+    try:
+        with lock:
+            _serial_ref.write(data)
+            _serial_ref.flush()
+        return True
+    except Exception as exc:
+        logger.warning("[telegram] serial write failed: %s", exc)
+        return False
 
 # Stored chat_id for broadcast messages (health check, search logs, etc.)
 _owner_chat_id: Optional[int] = config.TELEGRAM_OWNER_CHAT_ID
@@ -69,7 +84,7 @@ def _tg(method: str, **params) -> dict:
     url = f"{_BASE}/{method}"
     data = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
     req = urllib.request.Request(url, data=data.encode() if data else None)
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=5) as resp:
         return json.loads(resp.read())
 
 
@@ -103,7 +118,7 @@ def send_photo(chat_id: int, jpeg_bytes: bytes, caption: str = "") -> None:
             data=body,
             headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         )
-        with urlreq.urlopen(req, timeout=15):
+        with urlreq.urlopen(req, timeout=5):
             pass
     except Exception as exc:
         logger.warning("[telegram] sendPhoto failed: %s", exc)
@@ -126,10 +141,11 @@ def _ensure_owner_chat_id() -> Optional[int]:
 
 
 def broadcast(text: str) -> None:
-    """Send a message to the owner (last known chat_id). Used for boot status, logs."""
+    """Send a message to the owner (last known chat_id). Used for boot status, logs.
+    Runs in a background thread to avoid blocking the main loop."""
     cid = _ensure_owner_chat_id()
     if cid:
-        send_message(cid, text)
+        threading.Thread(target=send_message, args=(cid, text), daemon=True).start()
 
 
 def send_welcome() -> None:
@@ -153,9 +169,6 @@ def send_welcome() -> None:
         "🛑 /stop — Emergency stop\n"
         "📊 /status — Sensors & state\n"
         "🔌 /esp32 — Hardware check\n"
-        "📽 /present — Start presentation\n"
-        "➡️ /next — Next slide\n"
-        "⬅️ /prev — Previous slide\n"
         "❓ /help — All commands\n"
         "\n"
         "━━━ Try saying ━━━\n"
@@ -193,9 +206,6 @@ def register_commands() -> None:
         {"command": "stop", "description": "🛑 Emergency stop"},
         {"command": "status", "description": "📊 Sensor readings & state"},
         {"command": "esp32", "description": "🔌 ESP32 hardware check"},
-        {"command": "present", "description": "📽 Start presentation mode"},
-        {"command": "next", "description": "➡️ Next slide"},
-        {"command": "prev", "description": "⬅️ Previous slide"},
         {"command": "speed", "description": "⚡ Set motor speed (0-255)"},
         {"command": "auto", "description": "🚗 Switch to self-driving mode"},
         {"command": "ai", "description": "🤖 Switch to AI command mode"},
@@ -215,10 +225,10 @@ def register_commands() -> None:
 
 
 def broadcast_photo(jpeg_bytes: bytes, caption: str = "") -> None:
-    """Send a photo to the owner. Used for search step images."""
+    """Send a photo to the owner. Runs in background to avoid blocking search loop."""
     cid = _ensure_owner_chat_id()
     if cid:
-        send_photo(cid, jpeg_bytes, caption=caption)
+        threading.Thread(target=send_photo, args=(cid, jpeg_bytes), kwargs={"caption": caption}, daemon=True).start()
 
 
 def notify(text: str) -> None:
@@ -236,7 +246,7 @@ def _download_file(file_id: str) -> Optional[bytes]:
         if not file_path:
             return None
         url = f"https://api.telegram.org/file/bot{config.TELEGRAM_BOT_TOKEN}/{file_path}"
-        with urllib.request.urlopen(url, timeout=30) as resp:
+        with urllib.request.urlopen(url, timeout=10) as resp:
             return resp.read()
     except Exception as exc:
         logger.warning("[telegram] file download failed: %s", exc)
@@ -330,7 +340,7 @@ def _poll_loop() -> None:
                 params["offset"] = offset
 
             url = f"{_BASE}/getUpdates?" + urllib.parse.urlencode(params)
-            with urllib.request.urlopen(url, timeout=30) as resp:
+            with urllib.request.urlopen(url, timeout=25) as resp:
                 data = json.loads(resp.read())
 
             for update in data.get("result", []):
@@ -430,14 +440,6 @@ def _poll_loop() -> None:
                     _handle_status(chat_id)
                 elif tl == "/esp32":
                     _handle_esp32(chat_id)
-                elif tl == "/present":
-                    _handle_present_start(chat_id)
-                elif tl in ("/next", "next", "next slide"):
-                    _handle_present_next(chat_id)
-                elif tl in ("/prev", "previous", "prev slide", "previous slide"):
-                    _handle_present_prev(chat_id)
-                elif tl == "/endpresent":
-                    _handle_present_stop(chat_id)
                 elif tl == "/auto":
                     _handle_mode_switch(chat_id, auto=True)
                 elif tl == "/ai":
@@ -484,11 +486,6 @@ def _send_help_menu(chat_id: int) -> None:
         "  /esp32 — Hardware check\n"
         "  /auto — 🚗 Self-driving mode\n"
         "  /ai — 🤖 AI command mode\n"
-        "\n"
-        "*📽 Presentation*\n"
-        "  /present — Start slides\n"
-        "  /next — Next slide\n"
-        "  /prev — Previous slide\n"
         "\n"
         "*❓ Questions*\n"
         "  • Who is Virat Kohli?\n"
@@ -549,13 +546,11 @@ def _handle_speed(chat_id: int, text: str) -> None:
     if _serial_ref is None:
         send_message(chat_id, "⚠️ ESP32 not connected.")
         return
-    try:
-        cmd = json.dumps({"action": "stop", "speed": speed, "state": "idle"}) + "\n"
-        _serial_ref.write(cmd.encode())
-        _serial_ref.flush()
+    cmd = json.dumps({"action": "stop", "speed": speed, "state": "idle"}) + "\n"
+    if _safe_serial_write(cmd.encode()):
         send_message(chat_id, f"⚡ Speed set to {speed}/255\n{'🐢 Slow' if speed < 100 else '🚶 Normal' if speed < 160 else '🏎 Fast'}")
-    except Exception as exc:
-        send_message(chat_id, f"Speed set failed: {exc}")
+    else:
+        send_message(chat_id, "Speed set failed: serial write error")
 
 
 def _handle_mode_switch(chat_id: int, auto: bool) -> None:
@@ -563,30 +558,23 @@ def _handle_mode_switch(chat_id: int, auto: bool) -> None:
     if _serial_ref is None:
         send_message(chat_id, "⚠️ ESP32 not connected.")
         return
-    try:
-        mode = "auto" if auto else "ai"
-        cmd = json.dumps({"action": "mode", "mode": mode}) + "\n"
-        _serial_ref.write(cmd.encode())
-        _serial_ref.flush()
+    mode = "auto" if auto else "ai"
+    cmd = json.dumps({"action": "mode", "mode": mode}) + "\n"
+    if _safe_serial_write(cmd.encode()):
         if auto:
             send_message(chat_id, "🚗 AUTO mode — robot drives on its own, avoiding obstacles.")
         else:
             send_message(chat_id, "🤖 AI mode — robot waits for your commands.")
         logger.info("[telegram] mode switch to %s", mode)
-    except Exception as exc:
-        send_message(chat_id, f"Mode switch failed: {exc}")
+    else:
+        send_message(chat_id, f"Mode switch failed: serial write error")
 
 
 def _handle_stop(chat_id: int) -> None:
     if _cancel_event:
         _cancel_event.set()
-    if _serial_ref is not None:
-        try:
-            cmd = json.dumps({"action": "stop", "speed": 0}) + "\n"
-            _serial_ref.write(cmd.encode())
-            _serial_ref.flush()
-        except Exception:
-            pass
+    cmd = json.dumps({"action": "stop", "speed": 0}) + "\n"
+    _safe_serial_write(cmd.encode())
     send_message(chat_id, "🛑 Emergency stop! All movement halted.")
     logger.info("[telegram] /stop from chat_id=%s", chat_id)
 
@@ -623,75 +611,15 @@ def _handle_esp32(chat_id: int) -> None:
 
     # Try sending a ping
     if _serial_ref is not None:
-        try:
-            import json as _json
-            cmd = _json.dumps({"action": "stop", "speed": 0, "state": "idle"}) + "\n"
-            _serial_ref.write(cmd.encode())
-            _serial_ref.flush()
+        cmd = json.dumps({"action": "stop", "speed": 0, "state": "idle"}) + "\n"
+        if _safe_serial_write(cmd.encode()):
             lines.append("\nPing sent to ESP32.")
-        except Exception as exc:
-            lines.append(f"\nFailed to ping ESP32: {exc}")
+        else:
+            lines.append("\nFailed to ping ESP32.")
     else:
         lines.append("\nESP32 serial not connected.")
 
     send_message(chat_id, "\n".join(lines))
-
-
-def _handle_present_start(chat_id: int) -> None:
-    """Start presentation mode."""
-    if _presenter_ref is None:
-        send_message(chat_id, "Presentation module not loaded.")
-        return
-    speech = _presenter_ref.start()
-    if speech is None:
-        send_message(chat_id, "No slides loaded. Put slides in slides.json.")
-        return
-    title = _presenter_ref.current_title()
-    send_message(chat_id, f"Presentation started.\n{title}\n\nSpeaking...")
-    if _speaker_ref:
-        _speaker_ref.speak_blocking(speech)
-    send_message(chat_id, f"[{_presenter_ref.index + 1}/{_presenter_ref.total}] Done. /next to advance.")
-
-
-def _handle_present_next(chat_id: int) -> None:
-    """Advance to next slide and speak it."""
-    if _presenter_ref is None or not _presenter_ref.active:
-        send_message(chat_id, "No presentation active. Use /present to start.")
-        return
-    speech = _presenter_ref.advance()
-    if speech is None:
-        send_message(chat_id, "End of presentation. Use /endpresent to exit.")
-        return
-    title = _presenter_ref.current_title()
-    send_message(chat_id, f"[{_presenter_ref.index + 1}/{_presenter_ref.total}] {title}\nSpeaking...")
-    if _speaker_ref:
-        _speaker_ref.speak_blocking(speech)
-    send_message(chat_id, "Done. /next or /prev")
-
-
-def _handle_present_prev(chat_id: int) -> None:
-    """Go back to previous slide."""
-    if _presenter_ref is None or not _presenter_ref.active:
-        send_message(chat_id, "No presentation active. Use /present to start.")
-        return
-    speech = _presenter_ref.previous()
-    if speech is None:
-        send_message(chat_id, "Already at the first slide.")
-        return
-    title = _presenter_ref.current_title()
-    send_message(chat_id, f"[{_presenter_ref.index + 1}/{_presenter_ref.total}] {title}\nSpeaking...")
-    if _speaker_ref:
-        _speaker_ref.speak_blocking(speech)
-    send_message(chat_id, "Done. /next or /prev")
-
-
-def _handle_present_stop(chat_id: int) -> None:
-    """Stop presentation mode."""
-    if _presenter_ref is None or not _presenter_ref.active:
-        send_message(chat_id, "No presentation active.")
-        return
-    _presenter_ref.stop()
-    send_message(chat_id, "Presentation ended.")
 
 
 def _handle_vision_question(chat_id: int) -> None:
@@ -735,8 +663,8 @@ def start(
     camera=None,
     body_ctx=None,
     serial=None,
+    serial_lock: Optional[threading.Lock] = None,
     vlm=None,
-    presenter=None,
     speaker=None,
 ) -> Optional[threading.Thread]:
     """
@@ -744,8 +672,8 @@ def start(
     Telegram is disabled or the token is missing.
     """
     global _wake_event, _cancel_event, _shutdown_event
-    global _camera_ref, _body_ctx_ref, _serial_ref, _vlm_ref
-    global _presenter_ref, _speaker_ref
+    global _camera_ref, _body_ctx_ref, _serial_ref, _serial_lock, _vlm_ref
+    global _speaker_ref
 
     if not config.TELEGRAM_ENABLED:
         logger.info("[telegram] disabled (TELEGRAM_ENABLED=0)")
@@ -761,8 +689,8 @@ def start(
     _camera_ref     = camera
     _body_ctx_ref   = body_ctx
     _serial_ref     = serial
+    _serial_lock    = serial_lock
     _vlm_ref        = vlm
-    _presenter_ref  = presenter
     _speaker_ref    = speaker
 
     t = threading.Thread(target=_poll_loop, name="telegram", daemon=True)

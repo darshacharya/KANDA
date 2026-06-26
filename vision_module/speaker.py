@@ -156,9 +156,14 @@ class Speaker:
 
     def _play_audio(self, filepath: str) -> None:
         """Play an audio file using available system player."""
+        # Bluetooth speakers often cut the first ~200ms while waking from
+        # power-save mode. A tiny delay lets the audio sink activate.
+        import time as _time
+        _time.sleep(0.15)
+
         players = [
+            ["mpv", "--no-video", "--really-quiet", "--audio-buffer=0.5", filepath],
             ["play", "-q", filepath],
-            ["mpv", "--no-video", "--really-quiet", filepath],
             ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", filepath],
             ["aplay", filepath],
         ]

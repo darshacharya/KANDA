@@ -1,0 +1,15 @@
+.DS_Store
+*.zip
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.local
+.venv/
+venv/
+council-*.html
+council-*.md
+*.onnx
+*.mp3
+*.wav
+/tmp/

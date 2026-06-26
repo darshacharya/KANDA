@@ -11,6 +11,7 @@ Test standalone:
 import json
 import logging
 import time
+import urllib.error
 import urllib.request
 from typing import Optional
 
@@ -52,40 +53,51 @@ class VLM:
         return description
 
     def _call_nvidia(self, image_b64: str, prompt: str) -> Optional[str]:
-        """Call NVIDIA NIM Qwen VLM with base64 image."""
-        try:
-            payload = json.dumps({
-                "model": config.NVIDIA_VLM_MODEL,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {
-                            "url": f"data:image/jpeg;base64,{image_b64}"
-                        }},
-                    ],
-                }],
-                "max_tokens": 300,
-                "temperature": 0.7,
-            }).encode()
+        """Call NVIDIA NIM VLM with base64 image. Retries on 429 with exponential backoff."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                payload = json.dumps({
+                    "model": config.NVIDIA_VLM_MODEL,
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_b64}"
+                            }},
+                        ],
+                    }],
+                    "max_tokens": 300,
+                    "temperature": 0.3,
+                }).encode()
 
-            req = urllib.request.Request(
-                config.NVIDIA_ENDPOINT,
-                data=payload,
-                headers={
-                    "Authorization": f"Bearer {config.NVIDIA_API_KEY}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "KANDA/1.0",
-                },
-            )
-            resp = urllib.request.urlopen(req, timeout=30)
-            data = json.loads(resp.read())
-            text = data["choices"][0]["message"]["content"].strip()
-            logger.info("[nvidia-vlm] OK")
-            return text
-        except Exception as e:
-            logger.error("[nvidia-vlm] failed: %s", e)
-            return None
+                req = urllib.request.Request(
+                    config.NVIDIA_ENDPOINT,
+                    data=payload,
+                    headers={
+                        "Authorization": f"Bearer {config.NVIDIA_API_KEY}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "KANDA/1.0",
+                    },
+                )
+                resp = urllib.request.urlopen(req, timeout=30)
+                data = json.loads(resp.read())
+                text = data["choices"][0]["message"]["content"].strip()
+                logger.info("[nvidia-vlm] OK")
+                return text
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt < max_retries - 1:
+                    wait = 2 ** (attempt + 1)
+                    logger.warning("[nvidia-vlm] rate limited (429), retrying in %ds", wait)
+                    time.sleep(wait)
+                    continue
+                logger.error("[nvidia-vlm] HTTP %d: %s", e.code, e.reason)
+                return None
+            except Exception as e:
+                logger.error("[nvidia-vlm] failed: %s", e)
+                return None
+        return None
 
     def should_update(self) -> bool:
         """Check if enough time has passed since last VLM call."""

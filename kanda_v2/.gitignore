@@ -1,11 +1,10 @@
 .env
-.env.local
 __pycache__/
 *.pyc
 *.pyo
 .venv/
 venv/
-test_capture.jpg
-test_vad.wav
 *.onnx
-
+*.mp3
+*.wav
+/tmp/

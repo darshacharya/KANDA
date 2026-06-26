@@ -1,12 +1,13 @@
 """
 KANDA Vision Module — Body Context Assembler
-Builds the full robot body context snapshot that is injected into every Gemini call.
+Builds the full robot body context snapshot that is injected into every LLM call.
 
 This is the "self-awareness" module: it describes what the robot CAN do,
 what it currently SEES, what its SENSORS say, and what it has DONE recently.
 
-Every Gemini call (ASR intent, planner, VLM check, ReAct step) gets this context
-so the LLM always reasons with full knowledge of the robot's physical state.
+Every LLM call (intent classification, planner, VLM check, ReAct step) gets
+this context so the model always reasons with full knowledge of the robot's
+physical state.
 """
 
 from collections import deque
@@ -30,8 +31,6 @@ ROBOT CAPABILITIES:
 - Speaker: says any text via Bluetooth speaker
 - Microphone: hears and transcribes voice commands
 - Telegram: accepts text, voice notes, and photos as commands
-- Presentation mode: can deliver pre-scripted slide presentations
-
 GENERAL KNOWLEDGE:
 - Can answer questions about date, time, general knowledge, news, weather, etc.
 - Can have conversations, answer follow-up questions using conversation history
@@ -98,14 +97,14 @@ class BodyContext:
 
     def prompt_block(self, user_instruction: str = "") -> str:
         """
-        Build the full context block to prepend to any Gemini prompt.
-        This is what gives Gemini its 'body awareness'.
+        Build the full context block to prepend to any LLM prompt.
+        This is what gives the model its 'body awareness'.
 
         Args:
             user_instruction: the user's current voice command (optional)
 
         Returns:
-            Multi-line string ready to be inserted into a Gemini prompt.
+            Multi-line string ready to be inserted into an LLM prompt.
         """
         s = self._sensors
         hist = list(self._action_history)

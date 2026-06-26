@@ -1,7 +1,7 @@
-picamera2
-Pillow
-pyaudio
-pyserial
-openwakeword
-numpy
-gTTS
+picamera2>=0.3.12
+Pillow>=10.0.0
+pyaudio>=0.2.14
+pyserial>=3.5
+openwakeword>=0.6.0
+numpy>=1.26.0
+gTTS>=2.5.0

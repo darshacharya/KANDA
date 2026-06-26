@@ -5,6 +5,7 @@ Uses openWakeWord — fully open source, no account, no API key required.
 Wake phrase options (set KANDA_WAKE_WORD_MODEL in env):
   "hey_jarvis"    — say "Hey Jarvis"   (default, works out of the box)
   "alexa"         — say "Alexa"
+  "hey_marvin"    — say "Hey Marvin"
   "hey_mycroft"   — say "Hey Mycroft"
   custom          — record ~5 clips and train (see below)
 
@@ -116,12 +117,21 @@ class WakeWordDetector:
                 except Exception as e:
                     logger.warning("Custom model '%s' failed: %s", model_path, e)
 
-            # Fall back to loading all default models (includes hey_jarvis, alexa, etc.)
+            # Fall back to loading all default models (includes hey_jarvis, alexa, hey_marvin, hey_mycroft)
             if oww_model is None:
                 oww_model = Model()
-                # Use hey_jarvis as wake word since hey_kanda isn't trained yet
-                wake_label = "hey_jarvis"
-                logger.info("Using built-in wake word: 'hey_jarvis' (say 'Hey Jarvis')")
+                builtin_models = {k for k in oww_model.models.keys()}
+                # Match configured model to available built-in models
+                matched = False
+                for name in builtin_models:
+                    if model_path in name or name.startswith(model_path):
+                        wake_label = name
+                        matched = True
+                        break
+                if not matched:
+                    wake_label = "hey_jarvis"
+                    logger.warning("Model '%s' not found in built-ins %s, falling back to hey_jarvis", model_path, builtin_models)
+                logger.info("Using built-in wake word: '%s' (say '%s')", wake_label, wake_label.replace("_", " ").title())
 
             logger.info("openWakeWord loaded: '%s' — say the wake phrase to activate",
                         wake_label.replace("_", " ").title())

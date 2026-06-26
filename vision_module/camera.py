@@ -9,6 +9,7 @@ Test standalone:
 import base64
 import io
 import logging
+import threading
 import time
 from typing import Optional
 
@@ -26,6 +27,7 @@ class Camera:
     def __init__(self):
         self._picam2: Optional[Picamera2] = None
         self._running = False
+        self._lock = threading.Lock()
 
     def start(self) -> None:
         self._picam2 = Picamera2()
@@ -39,10 +41,11 @@ class Camera:
         logger.info("Camera started: %dx%d", *config.CAMERA_RESOLUTION)
 
     def capture_jpeg(self) -> Optional[bytes]:
-        """Capture a single frame, return as JPEG bytes."""
+        """Capture a single frame, return as JPEG bytes. Thread-safe."""
         if not self._running:
             return None
-        array = self._picam2.capture_array()
+        with self._lock:
+            array = self._picam2.capture_array()
         # picamera2 "RGB888" actually stores pixels as BGR in memory on Pi
         # (libcamera convention). Reverse channels so PIL gets true RGB.
         if array.ndim == 3 and array.shape[2] == 3:
@@ -53,7 +56,7 @@ class Camera:
         return buf.getvalue()
 
     def capture_base64(self) -> Optional[str]:
-        """Capture a frame, return as base64 string for Gemini API."""
+        """Capture a frame, return as base64 string for VLM API."""
         jpeg = self.capture_jpeg()
         if jpeg is None:
             return None
@@ -85,7 +88,7 @@ if __name__ == "__main__":
         print("Saved: test_capture.jpg")
 
         b64 = base64.b64encode(jpeg).decode()
-        print(f"Base64 length: {len(b64)} chars (ready for Gemini)")
+        print(f"Base64 length: {len(b64)} chars (ready for VLM API)")
     else:
         print("ERROR: capture failed")
 

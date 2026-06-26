@@ -1,0 +1,20 @@
+{
+  "user": {
+    "name": "Sudarshan",
+    "nickname": "Sudu",
+    "role": "the developer who built KANDA",
+    "about": "a robotics and AI enthusiast who created this project"
+  },
+  "facts": {
+    "kanda": "KANDA is an AI-powered autonomous robot built by Sudarshan. It can see, move, talk, listen, find objects, and respond to voice commands. It runs on a Raspberry Pi with an ESP32 for motor control.",
+    "who am i": "I am KANDA, your AI robot assistant. I was built by Sudarshan. I can see through my camera, move around, find things, answer questions, tell jokes, and remember things you tell me.",
+    "project": "KANDA stands for an intelligent robot companion. It uses wake word detection, speech recognition, vision AI, and natural language processing to interact with humans."
+  },
+  "reminders": [
+    "Show the voice command demo: say 'Hey Jarvis' then give a command",
+    "Demo the search feature: say 'Find a person' or 'Find a bottle'",
+    "Show compound commands: say 'Move forward and turn left'",
+    "Demo the camera: ask 'What do you see?'",
+    "Show memory: ask 'What's my name?' or 'What do you know about me?'"
+  ]
+}
